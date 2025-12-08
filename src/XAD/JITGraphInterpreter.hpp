@@ -93,7 +93,14 @@ class JITGraphInterpreter
         switch (op)
         {
             case JITOpCode::Input: return;
-            case JITOpCode::Constant: result = graph.const_pool[static_cast<std::size_t>(imm)]; break;
+            case JITOpCode::Constant:
+            {
+                std::size_t idx = static_cast<std::size_t>(imm);
+                if (idx >= graph.const_pool.size())
+                    throw std::runtime_error("const_pool index out of bounds");
+                result = graph.const_pool[idx];
+                break;
+            }
             case JITOpCode::Add: result = va + vb; break;
             case JITOpCode::Sub: result = va - vb; break;
             case JITOpCode::Mul: result = va * vb; break;

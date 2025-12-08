@@ -25,14 +25,16 @@
 #pragma once
 
 #include <XAD/Expression.hpp>
+#include <XAD/JITCompiler.hpp>
+#include <XAD/JITExprTraits.hpp>
 #include <XAD/Macros.hpp>
 #include <XAD/Tape.hpp>
-#include <XAD/JITCompiler.hpp>
 #include <XAD/Traits.hpp>
 
 #include <XAD/Vec.hpp>
 #include <algorithm>
 #include <iosfwd>
+#include <iostream>
 #include <utility>
 
 namespace xad
@@ -193,6 +195,7 @@ struct AReal
     typedef Scalar value_type;
     typedef typename ExprTraits<Scalar>::nested_type nested_type;
     typedef typename DerivativesTraits<Scalar, N>::type derivative_type;
+    typedef JITCompiler<nested_type, N> jit_type;
 
     XAD_INLINE AReal(nested_type val = nested_type()) : base_type(val), slot_(INVALID_SLOT) {}
 
@@ -290,31 +293,73 @@ struct AReal
     XAD_INLINE const derivative_type& derivative() const
     {
         auto t = tape_type::getActive();
-        if (!t)
-            throw NoTapeException();
-        if (slot_ == INVALID_SLOT)
+        if (t)
         {
-            // we return a dummy const ref if not registered on tape - always zero
-            static const derivative_type zero = derivative_type();
-            return zero;
+            if (slot_ == INVALID_SLOT)
+            {
+                static const derivative_type zero = derivative_type();
+                return zero;
+            }
+            return t->derivative(slot_);
         }
-        return t->derivative(slot_);
+
+        // JIT only works when Scalar is the same as nested_type (no higher-order AD)
+        if (std::is_same<Scalar, nested_type>::value)
+        {
+            auto j = jit_type::getActive();
+            if (j)
+            {
+                if (slot_ == INVALID_SLOT)
+                {
+                    static const derivative_type zero = derivative_type();
+                    return zero;
+                }
+                return reinterpret_cast<const derivative_type&>(j->derivative(slot_));
+            }
+        }
+
+        throw NoTapeException();
     }
 
     XAD_INLINE derivative_type& derivative()
     {
         auto t = tape_type::getActive();
-        if (!t)
-            throw NoTapeException();
-        // register ourselves if not already done
-        if (slot_ == INVALID_SLOT)
+        if (t)
         {
-            slot_ = t->registerVariable();
-            t->pushLhs(slot_);
+            // register ourselves if not already done
+            if (slot_ == INVALID_SLOT)
+            {
+                slot_ = t->registerVariable();
+                t->pushLhs(slot_);
+            }
+            return t->derivative(slot_);
         }
-        return t->derivative(slot_);
+
+        // JIT only works when Scalar is the same as nested_type (no higher-order AD)
+        if (std::is_same<Scalar, nested_type>::value)
+        {
+            auto j = jit_type::getActive();
+            if (j)
+            {
+                if (slot_ == INVALID_SLOT)
+                {
+                    slot_ = j->registerVariable();
+                }
+                return reinterpret_cast<derivative_type&>(j->derivative(slot_));
+            }
+        }
+
+        throw NoTapeException();
     }
     XAD_INLINE bool shouldRecord() const { return slot_ != INVALID_SLOT; }
+
+    uint32_t recordJIT(JITGraph& graph) const
+    {
+        if (slot_ != INVALID_SLOT)
+            return slot_;
+        // Not registered - treat as constant (handles nested AD types)
+        return recordJITConstant(graph, getNestedDoubleValue(this->a_));
+    }
 
   private:
     template <int Size, typename Expr>
@@ -371,6 +416,8 @@ struct ADVar
 
     XAD_INLINE bool shouldRecord() const { return shouldRecord_; }
 
+    uint32_t recordJIT(JITGraph& graph) const { return ar_.recordJIT(graph); }
+
   private:
     areal_type const& ar_;
     bool shouldRecord_;
@@ -415,11 +462,7 @@ XAD_INLINE AReal<Scalar, M>::AReal(
     jit_type* j = jit_type::getActive();
     if (j && expr.shouldRecord())
     {
-        // TODO: Record operation to graph using j->recordNode()
-        // Need to: 1) Extract opcode from Expr type via JITOpCodeFor
-        //          2) Get operand slots from sub-expressions
-        //          3) Call j->recordNode(opcode, operand_a, operand_b)
-        slot_ = j->registerVariable();
+        slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());
     }
 }
 
@@ -451,9 +494,7 @@ XAD_INLINE AReal<Scalar, M>& AReal<Scalar, M>::operator=(
     jit_type* j = jit_type::getActive();
     if (j && (expr.shouldRecord() || this->shouldRecord()))
     {
-        if (slot_ == INVALID_SLOT)
-            slot_ = j->registerVariable();
-        j->pushLhs(slot_);
+        slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());
     }
     this->a_ = expr.getValue();
     return *this;

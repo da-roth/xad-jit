@@ -97,10 +97,12 @@ class JITCompiler
 
     void newRecording()
     {
+        std::size_t numInputs = inputValues_.size();
         graph_.clear();
-        inputValues_.clear();
         derivatives_.clear();
         backend_.reset();
+        for (std::size_t i = 0; i < numInputs; ++i)
+            graph_.addInput();
     }
 
     XAD_INLINE void registerInput(active_type& inp)
@@ -167,6 +169,20 @@ class JITCompiler
     }
 
     uint32_t recordConstant(double value) { return graph_.addConstant(value); }
+
+    void forward(double* outputs, std::size_t numOutputs)
+    {
+        if (numOutputs != graph_.output_ids.size())
+            throw std::runtime_error("Output count mismatch");
+
+        std::size_t numInputs = graph_.input_ids.size();
+        std::vector<double> inputs(numInputs);
+        for (std::size_t i = 0; i < numInputs; ++i)
+            inputs[i] = *inputValues_[i];
+
+        backend_.compile(graph_);
+        backend_.forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
+    }
 
     void computeAdjoints()
     {
