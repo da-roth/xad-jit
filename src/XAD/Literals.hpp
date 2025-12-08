@@ -34,6 +34,7 @@
 #include <XAD/Vec.hpp>
 #include <algorithm>
 #include <iosfwd>
+#include <iostream>
 #include <utility>
 
 namespace xad
@@ -290,9 +291,14 @@ struct AReal
 
     XAD_INLINE const derivative_type& derivative() const
     {
+        std::cout << "[AReal] derivative() const called, slot_=" << slot_ << std::endl;
         auto t = tape_type::getActive();
+        std::cout << "[AReal] tape_type::getActive() = " << t << std::endl;
         if (!t)
+        {
+            std::cout << "[AReal] No tape active, throwing NoTapeException" << std::endl;
             throw NoTapeException();
+        }
         if (slot_ == INVALID_SLOT)
         {
             // we return a dummy const ref if not registered on tape - always zero
@@ -304,9 +310,14 @@ struct AReal
 
     XAD_INLINE derivative_type& derivative()
     {
+        std::cout << "[AReal] derivative() called, slot_=" << slot_ << std::endl;
         auto t = tape_type::getActive();
+        std::cout << "[AReal] tape_type::getActive() = " << t << std::endl;
         if (!t)
+        {
+            std::cout << "[AReal] No tape active, throwing NoTapeException" << std::endl;
             throw NoTapeException();
+        }
         // register ourselves if not already done
         if (slot_ == INVALID_SLOT)
         {
