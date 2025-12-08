@@ -120,7 +120,7 @@ TEST(JIT, JitBasedSimpleFunction)
         double expectedOutput = 8.0;   // f(2) = 2*3 + 2 = 8
         double expectedDeriv = 3.0;    // f'(x) = 3
 
-        xad::Tape<double> tape;
+        xad::JITCompiler<double> tape;
         xad::AD x(inputVal);
 
         tape.registerInput(x);
