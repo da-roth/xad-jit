@@ -78,7 +78,7 @@ TEST(JIT, TapeBasedSimpleFunction)
 
 TEST(JIT, JitBasedSimpleFunction)
 {
-    std::cout << "\n=== Tape-Based AD Test ===" << std::endl;
+    std::cout << "\n=== Jit-Based AD Test ===" << std::endl;
     std::cout << "Function: f(x) = x * 3 + 2" << std::endl;
     std::cout << "Derivative: f'(x) = 3" << std::endl;
 
