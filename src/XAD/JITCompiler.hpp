@@ -2,11 +2,13 @@
 
 #include <XAD/Config.hpp>
 #include <XAD/Exceptions.hpp>
+#include <XAD/JITBackendInterface.hpp>
 #include <XAD/JITGraph.hpp>
 #include <XAD/JITGraphInterpreter.hpp>
 #include <XAD/Macros.hpp>
 #include <XAD/Traits.hpp>
 #include <complex>
+#include <memory>
 #include <vector>
 
 namespace xad
@@ -15,7 +17,7 @@ namespace xad
 template <class Scalar, std::size_t M>
 struct AReal;
 
-template <class Real, std::size_t N = 1, class Backend = JITGraphInterpreter>
+template <class Real, std::size_t N = 1>
 class JITCompiler
 {
   public:
@@ -24,16 +26,32 @@ class JITCompiler
     typedef slot_type position_type;
     typedef AReal<Real, N> active_type;
     typedef Real value_type;
-    typedef JITCompiler<Real, N, Backend> jit_type;
+    typedef JITCompiler<Real, N> jit_type;
     typedef typename DerivativesTraits<Real, N>::type derivative_type;
-    typedef Backend backend_type;
 
     static constexpr slot_type INVALID_SLOT = slot_type(-1);
 
-    explicit JITCompiler(bool activate = true) : backend_()
+    // Default constructor - uses interpreter backend
+    explicit JITCompiler(bool activate = true)
+        : backend_(std::make_unique<JITGraphInterpreter>())
     {
         if (activate)
             setActive(this);
+    }
+
+    // Constructor with custom backend
+    explicit JITCompiler(std::unique_ptr<IJITBackend> backend, bool activate = true)
+        : backend_(std::move(backend))
+    {
+        if (activate)
+            setActive(this);
+    }
+
+    // Factory method for creating with specific backend type
+    template <class BackendType>
+    static JITCompiler withBackend(bool activate = true)
+    {
+        return JITCompiler(std::make_unique<BackendType>(), activate);
     }
 
     ~JITCompiler() { deactivate(); }
@@ -100,7 +118,8 @@ class JITCompiler
         std::size_t numInputs = inputValues_.size();
         graph_.clear();
         derivatives_.clear();
-        backend_.reset();
+        if (backend_)
+            backend_->reset();
         for (std::size_t i = 0; i < numInputs; ++i)
             graph_.addInput();
     }
@@ -175,17 +194,23 @@ class JITCompiler
         if (numOutputs != graph_.output_ids.size())
             throw std::runtime_error("Output count mismatch");
 
+        if (!backend_)
+            throw std::runtime_error("No backend configured");
+
         std::size_t numInputs = graph_.input_ids.size();
         std::vector<double> inputs(numInputs);
         for (std::size_t i = 0; i < numInputs; ++i)
             inputs[i] = *inputValues_[i];
 
-        backend_.compile(graph_);
-        backend_.forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
+        backend_->compile(graph_);
+        backend_->forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
     }
 
     void computeAdjoints()
     {
+        if (!backend_)
+            throw std::runtime_error("No backend configured");
+
         std::size_t numInputs = graph_.input_ids.size();
         std::size_t numOutputs = graph_.output_ids.size();
 
@@ -201,11 +226,11 @@ class JITCompiler
                 outputAdjoints[i] = derivatives_[outId];
         }
 
-        backend_.compile(graph_);
+        backend_->compile(graph_);
         std::vector<double> inputAdjoints(numInputs);
-        backend_.computeAdjoints(graph_, inputs.data(), numInputs,
-                                 outputAdjoints.data(), numOutputs,
-                                 inputAdjoints.data());
+        backend_->computeAdjoints(graph_, inputs.data(), numInputs,
+                                  outputAdjoints.data(), numOutputs,
+                                  inputAdjoints.data());
 
         derivatives_.resize(graph_.nodeCount(), derivative_type());
         for (std::size_t i = 0; i < numInputs; ++i)
@@ -244,7 +269,8 @@ class JITCompiler
         graph_.clear();
         inputValues_.clear();
         derivatives_.clear();
-        backend_.reset();
+        if (backend_)
+            backend_->reset();
     }
 
     void printStatus() const {}
@@ -263,12 +289,12 @@ class JITCompiler
   private:
     static XAD_THREAD_LOCAL JITCompiler* active_jit_;
     JITGraph graph_;
-    Backend backend_;
+    std::unique_ptr<IJITBackend> backend_;
     std::vector<const Real*> inputValues_;
     std::vector<derivative_type> derivatives_;
 };
 
-template <class Real, std::size_t N, class Backend>
-XAD_THREAD_LOCAL JITCompiler<Real, N, Backend>* JITCompiler<Real, N, Backend>::active_jit_ = nullptr;
+template <class Real, std::size_t N>
+XAD_THREAD_LOCAL JITCompiler<Real, N>* JITCompiler<Real, N>::active_jit_ = nullptr;
 
 }  // namespace xad

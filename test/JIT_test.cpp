@@ -60,6 +60,22 @@ T f3(const T& x)
         return 10.0 * x;
 }
 
+// f3ABool: Same as f3 but using ABool::If for trackable branches
+// This allows JIT to record both branches and select at runtime
+// f(x) = if (x < 2) 2*x else 10*x
+// For x=1: f(1)=2, f'(1)=2
+// For x=3: f(3)=30, f'(3)=10
+xad::AD f3ABool(const xad::AD& x)
+{
+    return xad::less(x, 2.0).If(2.0 * x, 10.0 * x);
+}
+
+// Plain double version for comparison
+double f3ABool_double(double x)
+{
+    return (x < 2.0) ? 2.0 * x : 10.0 * x;
+}
+
 // ============================================================================
 // Test Infrastructure
 // ============================================================================
@@ -88,7 +104,8 @@ class JITTest : public ::testing::Test
         testCases = {
             {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, {2.0, 0.5, -1.0}, true},
             {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, {2.0, 0.5}, true},
-            {"f3", "if (x < 2) 2*x else 10*x  [JIT records with x=1, reuses for x=3]", f3<double>, f3<xad::AD>, {1.0, 3.0}, false},
+            {"f3", "if (x < 2) 2*x else 10*x  [JIT uses recorded branch - EXPECT MISMATCH]", f3<double>, f3<xad::AD>, {1.0, 3.0}, false},
+            {"f3ABool", "ABool::If(x < 2, 2*x, 10*x)  [JIT tracks branches - SHOULD MATCH]", f3ABool_double, f3ABool, {1.0, 3.0}, true},
         };
     }
 };
