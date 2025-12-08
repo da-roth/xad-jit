@@ -131,6 +131,7 @@ set(public_headers
     XAD/JITBackendStub.hpp
     XAD/JITGraphInterpreter.hpp
     XAD/JITOpCodeTraits.hpp
+    XAD/JITExprTraits.hpp
     XAD/TapeContainer.hpp
     XAD/Traits.hpp
     XAD/TypeTraits.hpp

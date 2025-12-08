@@ -25,9 +25,10 @@
 #pragma once
 
 #include <XAD/Expression.hpp>
+#include <XAD/JITCompiler.hpp>
+#include <XAD/JITExprTraits.hpp>
 #include <XAD/Macros.hpp>
 #include <XAD/Tape.hpp>
-#include <XAD/JITCompiler.hpp>
 #include <XAD/Traits.hpp>
 
 #include <XAD/Vec.hpp>
@@ -316,6 +317,14 @@ struct AReal
     }
     XAD_INLINE bool shouldRecord() const { return slot_ != INVALID_SLOT; }
 
+    uint32_t recordJIT(JITGraph& graph) const
+    {
+        if (slot_ != INVALID_SLOT)
+            return slot_;
+        // Not registered - treat as constant
+        return recordJITConstant(graph, static_cast<double>(this->a_));
+    }
+
   private:
     template <int Size, typename Expr>
     XAD_FORCE_INLINE void pushAll(tape_type* t, const Expr& expr) const
@@ -371,6 +380,8 @@ struct ADVar
 
     XAD_INLINE bool shouldRecord() const { return shouldRecord_; }
 
+    uint32_t recordJIT(JITGraph& graph) const { return ar_.recordJIT(graph); }
+
   private:
     areal_type const& ar_;
     bool shouldRecord_;
@@ -415,11 +426,7 @@ XAD_INLINE AReal<Scalar, M>::AReal(
     jit_type* j = jit_type::getActive();
     if (j && expr.shouldRecord())
     {
-        // TODO: Record operation to graph using j->recordNode()
-        // Need to: 1) Extract opcode from Expr type via JITOpCodeFor
-        //          2) Get operand slots from sub-expressions
-        //          3) Call j->recordNode(opcode, operand_a, operand_b)
-        slot_ = j->registerVariable();
+        slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());
     }
 }
 
@@ -451,9 +458,7 @@ XAD_INLINE AReal<Scalar, M>& AReal<Scalar, M>::operator=(
     jit_type* j = jit_type::getActive();
     if (j && (expr.shouldRecord() || this->shouldRecord()))
     {
-        if (slot_ == INVALID_SLOT)
-            slot_ = j->registerVariable();
-        j->pushLhs(slot_);
+        slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());
     }
     this->a_ = expr.getValue();
     return *this;
