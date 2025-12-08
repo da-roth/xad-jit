@@ -8,13 +8,15 @@ namespace xad
 {
 
 // Helper to extract nested double value from potentially nested AD types
-template <class T>
-typename std::enable_if<std::is_arithmetic<T>::value, double>::type
-getNestedDoubleValue(const T& x) { return static_cast<double>(x); }
+// Non-template overloads for primitive types (preferred over template)
+inline double getNestedDoubleValue(double x) { return x; }
+inline double getNestedDoubleValue(float x) { return static_cast<double>(x); }
+inline double getNestedDoubleValue(long double x) { return static_cast<double>(x); }
+inline double getNestedDoubleValue(int x) { return static_cast<double>(x); }
 
+// Template for AD types - recurses via value()
 template <class T>
-typename std::enable_if<!std::is_arithmetic<T>::value, double>::type
-getNestedDoubleValue(const T& x) { return getNestedDoubleValue(x.value()); }
+double getNestedDoubleValue(const T& x) { return getNestedDoubleValue(x.value()); }
 
 // Helper to detect if Op has a scalar constant (b_ member)
 template <class Op, class = void>
