@@ -374,7 +374,7 @@ struct AReal
 
     template <class T, std::size_t d__cnt>
     friend class Tape;
-    template <class T, std::size_t d__cnt, class B>
+    template <class T, std::size_t d__cnt>
     friend class JITCompiler;
     template <class T, std::size_t d__cnt>
     friend class ABool;

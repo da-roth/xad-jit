@@ -1,5 +1,6 @@
 #pragma once
 
+#include <XAD/JITBackendInterface.hpp>
 #include <XAD/JITGraph.hpp>
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -14,12 +15,12 @@
 namespace xad
 {
 
-class JITGraphInterpreter
+class JITGraphInterpreter : public IJITBackend
 {
   public:
     JITGraphInterpreter() = default;
 
-    void compile(const JITGraph& graph)
+    void compile(const JITGraph& graph) override
     {
         nodeValues_.resize(graph.nodeCount());
         nodeAdjoints_.resize(graph.nodeCount());
@@ -27,7 +28,7 @@ class JITGraphInterpreter
 
     void forward(const JITGraph& graph,
                  const double* inputs, std::size_t numInputs,
-                 double* outputs, std::size_t numOutputs)
+                 double* outputs, std::size_t numOutputs) override
     {
         if (numInputs != graph.input_ids.size())
             throw std::runtime_error("Input count mismatch");
@@ -49,7 +50,7 @@ class JITGraphInterpreter
     void computeAdjoints(const JITGraph& graph,
                          const double* inputValues, std::size_t numInputs,
                          const double* outputAdjoints, std::size_t numOutputs,
-                         double* inputAdjoints)
+                         double* inputAdjoints) override
     {
         std::vector<double> outputs(numOutputs);
         forward(graph, inputValues, numInputs, outputs.data(), numOutputs);
@@ -66,7 +67,7 @@ class JITGraphInterpreter
             inputAdjoints[i] = nodeAdjoints_[graph.input_ids[i]];
     }
 
-    void reset()
+    void reset() override
     {
         nodeValues_.clear();
         nodeAdjoints_.clear();
