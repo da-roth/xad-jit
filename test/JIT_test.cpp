@@ -48,6 +48,7 @@ T f2(const T& x)
 struct TestCase
 {
     std::string name;
+    std::string formula;
     std::function<double(double)> func_double;
     std::function<xad::AD(const xad::AD&)> func_ad;
     double input;
@@ -65,8 +66,8 @@ class JITTest : public ::testing::Test
     void SetUp() override
     {
         testCases = {
-            {"f1 (linear)", f1<double>, f1<xad::AD>, 2.0},
-            {"f2 (complex)", f2<double>, f2<xad::AD>, 2.0},
+            {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, 2.0},
+            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, 2.0},
         };
     }
 };
@@ -107,10 +108,11 @@ TEST_F(JITTest, TapeVsJIT)
             jitDerivative = derivative(x);
         }
 
-        std::cout << tc.name << " (x=" << tc.input << "): "
-                  << "output=" << expectedOutput << ", "
-                  << "tape=" << tapeDerivative << ", "
-                  << "jit=" << jitDerivative << std::endl;
+        std::cout << tc.name << "(x) = " << tc.formula << std::endl;
+        std::cout << "  x = " << tc.input << std::endl;
+        std::cout << "  outputTape = " << tapeOutput << ", outputJIT = " << jitOutput << std::endl;
+        std::cout << "  derivTape  = " << tapeDerivative << ", derivJIT  = " << jitDerivative << std::endl;
+        std::cout << std::endl;
 
         EXPECT_NEAR(expectedOutput, tapeOutput, 1e-10) << "Tape output: " << tc.name;
         EXPECT_NEAR(expectedOutput, jitOutput, 1e-10) << "JIT output: " << tc.name;
