@@ -170,6 +170,20 @@ class JITCompiler
 
     uint32_t recordConstant(double value) { return graph_.addConstant(value); }
 
+    void forward(double* outputs, std::size_t numOutputs)
+    {
+        if (numOutputs != graph_.output_ids.size())
+            throw std::runtime_error("Output count mismatch");
+
+        std::size_t numInputs = graph_.input_ids.size();
+        std::vector<double> inputs(numInputs);
+        for (std::size_t i = 0; i < numInputs; ++i)
+            inputs[i] = *inputValues_[i];
+
+        backend_.compile(graph_);
+        backend_.forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
+    }
+
     void computeAdjoints()
     {
         std::size_t numInputs = graph_.input_ids.size();

@@ -99,21 +99,32 @@ TEST_F(JITTest, TapeVsJIT)
             }
         }
 
-        // Compute all with JIT
+        // Compute all with JIT (record once, reuse for all inputs)
         {
             xad::JITCompiler<double> jit;
+
+            // Record graph with first input
+            xad::AD x(tc.inputs[0]);
+            jit.registerInput(x);
+            jit.newRecording();
+            xad::AD y = tc.func_ad(x);
+            jit.registerOutput(y);
+
+            // Reuse graph for all inputs
             for (double input : tc.inputs)
             {
-                xad::AD x(input);
-                jit.registerInput(x);
-                jit.newRecording();
-                xad::AD y = tc.func_ad(x);
-                jit.registerOutput(y);
+                value(x) = input;
+
+                // Forward pass
+                double output;
+                jit.forward(&output, 1);
+                jitOutputs.push_back(output);
+
+                // Backward pass
+                jit.clearDerivatives();
                 derivative(y) = 1.0;
                 jit.computeAdjoints();
-                jitOutputs.push_back(value(y));
                 jitDerivatives.push_back(derivative(x));
-                jit.clearAll();
             }
         }
 
