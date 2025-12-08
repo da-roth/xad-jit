@@ -40,8 +40,6 @@ namespace xad
 template <class, std::size_t>
 class Tape;
 template <class, std::size_t>
-class JITCompiler;
-template <class, std::size_t>
 struct FReal;
 
 template <class Scalar, std::size_t N>
@@ -331,7 +329,7 @@ struct AReal
 
     template <class T, std::size_t d__cnt>
     friend class Tape;
-    template <class T, std::size_t d__cnt>
+    template <class T, std::size_t d__cnt, class B>
     friend class JITCompiler;
     typename tape_type::slot_type slot_;
 };
@@ -417,8 +415,11 @@ XAD_INLINE AReal<Scalar, M>::AReal(
     jit_type* j = jit_type::getActive();
     if (j && expr.shouldRecord())
     {
+        // TODO: Record operation to graph using j->recordNode()
+        // Need to: 1) Extract opcode from Expr type via JITOpCodeFor
+        //          2) Get operand slots from sub-expressions
+        //          3) Call j->recordNode(opcode, operand_a, operand_b)
         slot_ = j->registerVariable();
-        j->pushLhs(slot_);
     }
 }
 
