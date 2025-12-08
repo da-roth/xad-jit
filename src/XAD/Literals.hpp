@@ -195,6 +195,7 @@ struct AReal
     typedef Scalar value_type;
     typedef typename ExprTraits<Scalar>::nested_type nested_type;
     typedef typename DerivativesTraits<Scalar, N>::type derivative_type;
+    typedef JITCompiler<nested_type, N> jit_type;
 
     XAD_INLINE AReal(nested_type val = nested_type()) : base_type(val), slot_(INVALID_SLOT) {}
 
@@ -294,18 +295,34 @@ struct AReal
         std::cout << "[AReal] derivative() const called, slot_=" << slot_ << std::endl;
         auto t = tape_type::getActive();
         std::cout << "[AReal] tape_type::getActive() = " << t << std::endl;
-        if (!t)
+        if (t)
         {
-            std::cout << "[AReal] No tape active, throwing NoTapeException" << std::endl;
-            throw NoTapeException();
+            if (slot_ == INVALID_SLOT)
+            {
+                static const derivative_type zero = derivative_type();
+                return zero;
+            }
+            return t->derivative(slot_);
         }
-        if (slot_ == INVALID_SLOT)
+
+        // JIT only works when Scalar is the same as nested_type (no higher-order AD)
+        if (std::is_same<Scalar, nested_type>::value)
         {
-            // we return a dummy const ref if not registered on tape - always zero
-            static const derivative_type zero = derivative_type();
-            return zero;
+            auto j = jit_type::getActive();
+            std::cout << "[AReal] jit_type::getActive() = " << j << std::endl;
+            if (j)
+            {
+                if (slot_ == INVALID_SLOT)
+                {
+                    static const derivative_type zero = derivative_type();
+                    return zero;
+                }
+                return reinterpret_cast<const derivative_type&>(j->derivative(slot_));
+            }
         }
-        return t->derivative(slot_);
+
+        std::cout << "[AReal] No tape or JIT active, throwing NoTapeException" << std::endl;
+        throw NoTapeException();
     }
 
     XAD_INLINE derivative_type& derivative()
@@ -313,18 +330,34 @@ struct AReal
         std::cout << "[AReal] derivative() called, slot_=" << slot_ << std::endl;
         auto t = tape_type::getActive();
         std::cout << "[AReal] tape_type::getActive() = " << t << std::endl;
-        if (!t)
+        if (t)
         {
-            std::cout << "[AReal] No tape active, throwing NoTapeException" << std::endl;
-            throw NoTapeException();
+            // register ourselves if not already done
+            if (slot_ == INVALID_SLOT)
+            {
+                slot_ = t->registerVariable();
+                t->pushLhs(slot_);
+            }
+            return t->derivative(slot_);
         }
-        // register ourselves if not already done
-        if (slot_ == INVALID_SLOT)
+
+        // JIT only works when Scalar is the same as nested_type (no higher-order AD)
+        if (std::is_same<Scalar, nested_type>::value)
         {
-            slot_ = t->registerVariable();
-            t->pushLhs(slot_);
+            auto j = jit_type::getActive();
+            std::cout << "[AReal] jit_type::getActive() = " << j << std::endl;
+            if (j)
+            {
+                if (slot_ == INVALID_SLOT)
+                {
+                    slot_ = j->registerVariable();
+                }
+                return reinterpret_cast<derivative_type&>(j->derivative(slot_));
+            }
         }
-        return t->derivative(slot_);
+
+        std::cout << "[AReal] No tape or JIT active, throwing NoTapeException" << std::endl;
+        throw NoTapeException();
     }
     XAD_INLINE bool shouldRecord() const { return slot_ != INVALID_SLOT; }
 
