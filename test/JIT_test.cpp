@@ -213,7 +213,7 @@ TEST_F(JITTest, TapeVsJITForge)
 
         // Compute all with JIT Forge backend (record once, reuse for all inputs)
         {
-            xad::JITCompiler<double, 1, xad::JITForgeBackend> jit;
+            auto jit = xad::JITCompiler<double, 1>::withBackend<xad::JITForgeBackend>();
 
             // Record graph with first input
             xad::AD x(tc.inputs[0]);

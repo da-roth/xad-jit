@@ -2,11 +2,13 @@
 
 #include <XAD/Config.hpp>
 #include <XAD/Exceptions.hpp>
+#include <XAD/JITBackendInterface.hpp>
 #include <XAD/JITGraph.hpp>
 #include <XAD/JITGraphInterpreter.hpp>
 #include <XAD/Macros.hpp>
 #include <XAD/Traits.hpp>
 #include <complex>
+#include <memory>
 #include <vector>
 
 namespace xad
@@ -15,61 +17,41 @@ namespace xad
 template <class Scalar, std::size_t M>
 struct AReal;
 
-// Base class for JIT compiler that provides backend-agnostic active JIT tracking
-// This allows AReal to find the active JIT regardless of which backend is used
 template <class Real, std::size_t N = 1>
-class JITCompilerBase
+class JITCompiler
 {
   public:
-    typedef unsigned int slot_type;
-    static constexpr slot_type INVALID_SLOT = slot_type(-1);
-
-    virtual ~JITCompilerBase() = default;
-    virtual JITGraph& getGraph() = 0;
-    virtual typename DerivativesTraits<Real, N>::type& derivative(slot_type s) = 0;
-    virtual slot_type registerVariable() = 0;
-
-    // Methods for recording nodes (used by ABool and other helpers)
-    uint32_t recordNode(JITOpCode op, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0)
-    {
-        return getGraph().addNode(op, a, b, c);
-    }
-
-    uint32_t recordConstant(double value) { return getGraph().addConstant(value); }
-
-    static JITCompilerBase* getActive() { return active_base_; }
-
-  protected:
-    static void setActiveBase(JITCompilerBase* j) { active_base_ = j; }
-    static void clearActiveBase() { active_base_ = nullptr; }
-
-  private:
-    static XAD_THREAD_LOCAL JITCompilerBase* active_base_;
-};
-
-template <class Real, std::size_t N>
-XAD_THREAD_LOCAL JITCompilerBase<Real, N>* JITCompilerBase<Real, N>::active_base_ = nullptr;
-
-template <class Real, std::size_t N = 1, class Backend = JITGraphInterpreter>
-class JITCompiler : public JITCompilerBase<Real, N>
-{
-  public:
-    typedef JITCompilerBase<Real, N> base_type;
     typedef unsigned int size_type;
     typedef unsigned int slot_type;
     typedef slot_type position_type;
     typedef AReal<Real, N> active_type;
     typedef Real value_type;
-    typedef JITCompiler<Real, N, Backend> jit_type;
+    typedef JITCompiler<Real, N> jit_type;
     typedef typename DerivativesTraits<Real, N>::type derivative_type;
-    typedef Backend backend_type;
 
     static constexpr slot_type INVALID_SLOT = slot_type(-1);
 
-    explicit JITCompiler(bool activate = true) : backend_()
+    // Default constructor - uses interpreter backend
+    explicit JITCompiler(bool activate = true)
+        : backend_(std::make_unique<JITGraphInterpreter>())
     {
         if (activate)
             setActive(this);
+    }
+
+    // Constructor with custom backend
+    explicit JITCompiler(std::unique_ptr<IJITBackend> backend, bool activate = true)
+        : backend_(std::move(backend))
+    {
+        if (activate)
+            setActive(this);
+    }
+
+    // Factory method for creating with specific backend type
+    template <class BackendType>
+    static JITCompiler withBackend(bool activate = true)
+    {
+        return JITCompiler(std::make_unique<BackendType>(), activate);
     }
 
     ~JITCompiler() { deactivate(); }
@@ -113,10 +95,7 @@ class JITCompiler : public JITCompilerBase<Real, N>
     XAD_INLINE void deactivate()
     {
         if (active_jit_ == this)
-        {
             active_jit_ = nullptr;
-            base_type::clearActiveBase();
-        }
     }
 
     XAD_INLINE bool isActive() const { return active_jit_ == this; }
@@ -127,24 +106,20 @@ class JITCompiler : public JITCompilerBase<Real, N>
         if (active_jit_ != nullptr)
             throw OutOfRange("JIT Compiler already active");
         active_jit_ = j;
-        base_type::setActiveBase(j);
     }
 
-    XAD_INLINE static void deactivateAll()
-    {
-        active_jit_ = nullptr;
-        base_type::clearActiveBase();
-    }
+    XAD_INLINE static void deactivateAll() { active_jit_ = nullptr; }
 
     const JITGraph& getGraph() const { return graph_; }
-    JITGraph& getGraph() override { return graph_; }
+    JITGraph& getGraph() { return graph_; }
 
     void newRecording()
     {
         std::size_t numInputs = inputValues_.size();
         graph_.clear();
         derivatives_.clear();
-        backend_.reset();
+        if (backend_)
+            backend_->reset();
         for (std::size_t i = 0; i < numInputs; ++i)
             graph_.addInput();
     }
@@ -205,7 +180,7 @@ class JITCompiler : public JITCompilerBase<Real, N>
             registerOutput(*first++);
     }
 
-    slot_type registerVariable() override { return static_cast<slot_type>(graph_.nodeCount()); }
+    slot_type registerVariable() { return static_cast<slot_type>(graph_.nodeCount()); }
 
     uint32_t recordNode(JITOpCode op, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0)
     {
@@ -219,17 +194,23 @@ class JITCompiler : public JITCompilerBase<Real, N>
         if (numOutputs != graph_.output_ids.size())
             throw std::runtime_error("Output count mismatch");
 
+        if (!backend_)
+            throw std::runtime_error("No backend configured");
+
         std::size_t numInputs = graph_.input_ids.size();
         std::vector<double> inputs(numInputs);
         for (std::size_t i = 0; i < numInputs; ++i)
             inputs[i] = *inputValues_[i];
 
-        backend_.compile(graph_);
-        backend_.forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
+        backend_->compile(graph_);
+        backend_->forward(graph_, inputs.data(), numInputs, outputs, numOutputs);
     }
 
     void computeAdjoints()
     {
+        if (!backend_)
+            throw std::runtime_error("No backend configured");
+
         std::size_t numInputs = graph_.input_ids.size();
         std::size_t numOutputs = graph_.output_ids.size();
 
@@ -245,18 +226,18 @@ class JITCompiler : public JITCompilerBase<Real, N>
                 outputAdjoints[i] = derivatives_[outId];
         }
 
-        backend_.compile(graph_);
+        backend_->compile(graph_);
         std::vector<double> inputAdjoints(numInputs);
-        backend_.computeAdjoints(graph_, inputs.data(), numInputs,
-                                 outputAdjoints.data(), numOutputs,
-                                 inputAdjoints.data());
+        backend_->computeAdjoints(graph_, inputs.data(), numInputs,
+                                  outputAdjoints.data(), numOutputs,
+                                  inputAdjoints.data());
 
         derivatives_.resize(graph_.nodeCount(), derivative_type());
         for (std::size_t i = 0; i < numInputs; ++i)
             derivatives_[graph_.input_ids[i]] = inputAdjoints[i];
     }
 
-    derivative_type& derivative(slot_type s) override
+    derivative_type& derivative(slot_type s)
     {
         if (s >= derivatives_.size())
             derivatives_.resize(s + 1, derivative_type());
@@ -288,7 +269,8 @@ class JITCompiler : public JITCompilerBase<Real, N>
         graph_.clear();
         inputValues_.clear();
         derivatives_.clear();
-        backend_.reset();
+        if (backend_)
+            backend_->reset();
     }
 
     void printStatus() const {}
@@ -307,24 +289,12 @@ class JITCompiler : public JITCompilerBase<Real, N>
   private:
     static XAD_THREAD_LOCAL JITCompiler* active_jit_;
     JITGraph graph_;
-    Backend backend_;
+    std::unique_ptr<IJITBackend> backend_;
     std::vector<const Real*> inputValues_;
     std::vector<derivative_type> derivatives_;
 };
 
-template <class Real, std::size_t N, class Backend>
-XAD_THREAD_LOCAL JITCompiler<Real, N, Backend>* JITCompiler<Real, N, Backend>::active_jit_ = nullptr;
-
-// Forward declare Forge backend for typedef
-class JITForgeBackend;
-
-// Convenience typedefs for common JIT compiler configurations
-template <class Real = double, std::size_t N = 1>
-using JITInterpreter = JITCompiler<Real, N, JITGraphInterpreter>;
-
-#ifdef XAD_USE_FORGE
-template <class Real = double, std::size_t N = 1>
-using JITForge = JITCompiler<Real, N, JITForgeBackend>;
-#endif
+template <class Real, std::size_t N>
+XAD_THREAD_LOCAL JITCompiler<Real, N>* JITCompiler<Real, N>::active_jit_ = nullptr;
 
 }  // namespace xad

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <XAD/JITBackendInterface.hpp>
 #include <XAD/JITGraph.hpp>
 #include <XAD/JITGraphInterpreter.hpp>
 
@@ -24,11 +25,11 @@ namespace xad
  * Uses Forge's JIT compiler for fast forward pass execution.
  * Falls back to JITGraphInterpreter for adjoint computation.
  */
-class JITForgeBackend
+class JITForgeBackend : public IJITBackend
 {
   public:
     JITForgeBackend() = default;
-    ~JITForgeBackend() = default;
+    ~JITForgeBackend() override = default;
 
     JITForgeBackend(JITForgeBackend&&) noexcept = default;
     JITForgeBackend& operator=(JITForgeBackend&&) noexcept = default;
@@ -37,7 +38,7 @@ class JITForgeBackend
     JITForgeBackend(const JITForgeBackend&) = delete;
     JITForgeBackend& operator=(const JITForgeBackend&) = delete;
 
-    void compile(const JITGraph& graph)
+    void compile(const JITGraph& graph) override
     {
         // Build forge::Graph from JITGraph
         forgeGraph_ = forge::Graph();
@@ -98,7 +99,7 @@ class JITForgeBackend
 
     void forward(const JITGraph& graph,
                  const double* inputs, std::size_t numInputs,
-                 double* outputs, std::size_t numOutputs)
+                 double* outputs, std::size_t numOutputs) override
     {
         if (!kernel_ || !buffer_)
             throw std::runtime_error("Backend not compiled");
@@ -126,14 +127,14 @@ class JITForgeBackend
     void computeAdjoints(const JITGraph& graph,
                          const double* inputValues, std::size_t numInputs,
                          const double* outputAdjoints, std::size_t numOutputs,
-                         double* inputAdjoints)
+                         double* inputAdjoints) override
     {
         // Use interpreter for adjoint computation
         interpreter_.computeAdjoints(graph, inputValues, numInputs,
                                      outputAdjoints, numOutputs, inputAdjoints);
     }
 
-    void reset()
+    void reset() override
     {
         kernel_.reset();
         buffer_.reset();

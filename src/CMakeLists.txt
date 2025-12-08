@@ -128,6 +128,7 @@ set(public_headers
     XAD/Tape.hpp
     XAD/JITCompiler.hpp
     XAD/JITGraph.hpp
+    XAD/JITBackendInterface.hpp
     XAD/JITBackendStub.hpp
     XAD/JITGraphInterpreter.hpp
     XAD/JITOpCodeTraits.hpp
