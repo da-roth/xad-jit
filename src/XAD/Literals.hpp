@@ -196,6 +196,7 @@ struct AReal
     typedef typename ExprTraits<Scalar>::nested_type nested_type;
     typedef typename DerivativesTraits<Scalar, N>::type derivative_type;
     typedef JITCompiler<nested_type, N> jit_type;
+    typedef JITCompilerBase<nested_type, N> jit_base_type;
 
     XAD_INLINE AReal(nested_type val = nested_type()) : base_type(val), slot_(INVALID_SLOT) {}
 
@@ -306,7 +307,7 @@ struct AReal
         // JIT only works when Scalar is the same as nested_type (no higher-order AD)
         if (std::is_same<Scalar, nested_type>::value)
         {
-            auto j = jit_type::getActive();
+            auto j = jit_base_type::getActive();
             if (j)
             {
                 if (slot_ == INVALID_SLOT)
@@ -338,7 +339,7 @@ struct AReal
         // JIT only works when Scalar is the same as nested_type (no higher-order AD)
         if (std::is_same<Scalar, nested_type>::value)
         {
-            auto j = jit_type::getActive();
+            auto j = jit_base_type::getActive();
             if (j)
             {
                 if (slot_ == INVALID_SLOT)
@@ -446,7 +447,7 @@ XAD_INLINE AReal<Scalar, M>::AReal(
     const Expression<Scalar, Expr, typename DerivativesTraits<Scalar, M>::type>& expr)
     : base_type(expr.getValue()), slot_(INVALID_SLOT)
 {
-    typedef JITCompiler<Scalar, M> jit_type;
+    typedef JITCompilerBase<Scalar, M> jit_base_type;
 
     tape_type* s = tape_type::getActive();
     if (s)
@@ -461,7 +462,7 @@ XAD_INLINE AReal<Scalar, M>::AReal(
     }
 
     // Only check JIT if tape is not active
-    jit_type* j = jit_type::getActive();
+    jit_base_type* j = jit_base_type::getActive();
     if (j && expr.shouldRecord())
     {
         slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());
@@ -473,7 +474,7 @@ template <class Expr>
 XAD_INLINE AReal<Scalar, M>& AReal<Scalar, M>::operator=(
     const Expression<Scalar, Expr, typename DerivativesTraits<Scalar, M>::type>& expr)
 {
-    typedef JITCompiler<Scalar, M> jit_type;
+    typedef JITCompilerBase<Scalar, M> jit_base_type;
 
     tape_type* s = tape_type::getActive();
     if (s)
@@ -493,7 +494,7 @@ XAD_INLINE AReal<Scalar, M>& AReal<Scalar, M>::operator=(
     }
 
     // Only check JIT if tape is not active
-    jit_type* j = jit_type::getActive();
+    jit_base_type* j = jit_base_type::getActive();
     if (j && (expr.shouldRecord() || this->shouldRecord()))
     {
         slot_ = static_cast<const Expr&>(expr).recordJIT(j->getGraph());

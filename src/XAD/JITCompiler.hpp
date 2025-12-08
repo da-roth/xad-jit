@@ -15,10 +15,46 @@ namespace xad
 template <class Scalar, std::size_t M>
 struct AReal;
 
-template <class Real, std::size_t N = 1, class Backend = JITGraphInterpreter>
-class JITCompiler
+// Base class for JIT compiler that provides backend-agnostic active JIT tracking
+// This allows AReal to find the active JIT regardless of which backend is used
+template <class Real, std::size_t N = 1>
+class JITCompilerBase
 {
   public:
+    typedef unsigned int slot_type;
+    static constexpr slot_type INVALID_SLOT = slot_type(-1);
+
+    virtual ~JITCompilerBase() = default;
+    virtual JITGraph& getGraph() = 0;
+    virtual typename DerivativesTraits<Real, N>::type& derivative(slot_type s) = 0;
+    virtual slot_type registerVariable() = 0;
+
+    // Methods for recording nodes (used by ABool and other helpers)
+    uint32_t recordNode(JITOpCode op, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0)
+    {
+        return getGraph().addNode(op, a, b, c);
+    }
+
+    uint32_t recordConstant(double value) { return getGraph().addConstant(value); }
+
+    static JITCompilerBase* getActive() { return active_base_; }
+
+  protected:
+    static void setActiveBase(JITCompilerBase* j) { active_base_ = j; }
+    static void clearActiveBase() { active_base_ = nullptr; }
+
+  private:
+    static XAD_THREAD_LOCAL JITCompilerBase* active_base_;
+};
+
+template <class Real, std::size_t N>
+XAD_THREAD_LOCAL JITCompilerBase<Real, N>* JITCompilerBase<Real, N>::active_base_ = nullptr;
+
+template <class Real, std::size_t N = 1, class Backend = JITGraphInterpreter>
+class JITCompiler : public JITCompilerBase<Real, N>
+{
+  public:
+    typedef JITCompilerBase<Real, N> base_type;
     typedef unsigned int size_type;
     typedef unsigned int slot_type;
     typedef slot_type position_type;
@@ -77,7 +113,10 @@ class JITCompiler
     XAD_INLINE void deactivate()
     {
         if (active_jit_ == this)
+        {
             active_jit_ = nullptr;
+            base_type::clearActiveBase();
+        }
     }
 
     XAD_INLINE bool isActive() const { return active_jit_ == this; }
@@ -88,12 +127,17 @@ class JITCompiler
         if (active_jit_ != nullptr)
             throw OutOfRange("JIT Compiler already active");
         active_jit_ = j;
+        base_type::setActiveBase(j);
     }
 
-    XAD_INLINE static void deactivateAll() { active_jit_ = nullptr; }
+    XAD_INLINE static void deactivateAll()
+    {
+        active_jit_ = nullptr;
+        base_type::clearActiveBase();
+    }
 
     const JITGraph& getGraph() const { return graph_; }
-    JITGraph& getGraph() { return graph_; }
+    JITGraph& getGraph() override { return graph_; }
 
     void newRecording()
     {
@@ -161,7 +205,7 @@ class JITCompiler
             registerOutput(*first++);
     }
 
-    slot_type registerVariable() { return static_cast<slot_type>(graph_.nodeCount()); }
+    slot_type registerVariable() override { return static_cast<slot_type>(graph_.nodeCount()); }
 
     uint32_t recordNode(JITOpCode op, uint32_t a = 0, uint32_t b = 0, uint32_t c = 0)
     {
@@ -212,7 +256,7 @@ class JITCompiler
             derivatives_[graph_.input_ids[i]] = inputAdjoints[i];
     }
 
-    derivative_type& derivative(slot_type s)
+    derivative_type& derivative(slot_type s) override
     {
         if (s >= derivatives_.size())
             derivatives_.resize(s + 1, derivative_type());

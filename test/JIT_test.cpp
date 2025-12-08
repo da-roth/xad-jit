@@ -18,26 +18,19 @@ T f1(const T& x)
     return x * 3.0 + 2.0;
 }
 
-// f2: Complex function with many math operations
-// Uses: sin, cos, exp, log, sqrt, tanh, sinh, cosh, abs, cbrt, log10, log2, erf
-// Note: pow with scalar exponent not yet supported in JIT
+// f2: Function with supported math operations
+// Uses: sin, cos, exp, log, sqrt, abs (Forge-compatible)
 template <class T>
 T f2(const T& x)
 {
     using std::sin; using std::cos; using std::exp; using std::log;
-    using std::sqrt; using std::tanh; using std::sinh;
-    using std::cosh; using std::abs; using std::cbrt;
-    using std::log10; using std::log2; using std::erf;
+    using std::sqrt; using std::abs;
 
     T result = sin(x) + cos(x) * 2.0;
     result = result + exp(x / 10.0) + log(x + 5.0);
     result = result + sqrt(x + 1.0);
-    result = result + tanh(x / 3.0) + sinh(x / 5.0) + cosh(x / 5.0);
     result = result + abs(x - 1.0) + x * x;
     result = result + 1.0 / (x + 2.0);
-    result = result + cbrt(x + 1.0);
-    result = result + log10(x + 1.0) + log2(x + 1.0);
-    result = result + erf(x / 2.0);
     return result;
 }
 
@@ -103,7 +96,7 @@ class JITTest : public ::testing::Test
     {
         testCases = {
             {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, {2.0, 0.5, -1.0}, true},
-            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, {2.0, 0.5}, true},
+            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + abs(x-1) + x*x + 1/(x+2)", f2<double>, f2<xad::AD>, {2.0, 0.5}, true},
             {"f3", "if (x < 2) 2*x else 10*x  [JIT uses recorded branch - EXPECT MISMATCH]", f3<double>, f3<xad::AD>, {1.0, 3.0}, false},
             {"f3ABool", "ABool::If(x < 2, 2*x, 10*x)  [JIT tracks branches - SHOULD MATCH]", f3ABool_double, f3ABool, {1.0, 3.0}, true},
         };

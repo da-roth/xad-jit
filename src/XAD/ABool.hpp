@@ -22,11 +22,11 @@ template <class Scalar, std::size_t N = 1>
 class ABool
 {
   public:
-    using jit_type = JITCompiler<Scalar, N>;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
     using areal_type = AReal<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using slot_type = typename jit_base_type::slot_type;
 
-    static constexpr slot_type INVALID_SLOT = jit_type::INVALID_SLOT;
+    static constexpr slot_type INVALID_SLOT = jit_base_type::INVALID_SLOT;
 
     // Constructor: from plain bool (no graph tracking)
     explicit ABool(bool b = false) : passive_(b), slot_(INVALID_SLOT) {}
@@ -49,7 +49,7 @@ class ABool
     areal_type If(const areal_type& trueVal, const areal_type& falseVal) const
     {
         // Check if JIT is active and we have a valid condition slot
-        auto* jit = jit_type::getActive();
+        auto* jit = jit_base_type::getActive();
         if (jit && hasSlot())
         {
             // Get slots for both branches (they must be recorded in the graph)
@@ -101,12 +101,12 @@ class ABool
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> less(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) < value(b));
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -128,12 +128,12 @@ ABool<Scalar, N> less(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> less(const AReal<Scalar, N>& a, Scalar b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) < b);
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -151,12 +151,12 @@ ABool<Scalar, N> less(const AReal<Scalar, N>& a, Scalar b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> greater(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) > value(b));
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -177,12 +177,12 @@ ABool<Scalar, N> greater(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> greater(const AReal<Scalar, N>& a, Scalar b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) > b);
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -200,12 +200,12 @@ ABool<Scalar, N> greater(const AReal<Scalar, N>& a, Scalar b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> lessEqual(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) <= value(b));
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -226,12 +226,12 @@ ABool<Scalar, N> lessEqual(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> lessEqual(const AReal<Scalar, N>& a, Scalar b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) <= b);
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -249,12 +249,12 @@ ABool<Scalar, N> lessEqual(const AReal<Scalar, N>& a, Scalar b)
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> greaterEqual(const AReal<Scalar, N>& a, const AReal<Scalar, N>& b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) >= value(b));
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
@@ -275,12 +275,12 @@ ABool<Scalar, N> greaterEqual(const AReal<Scalar, N>& a, const AReal<Scalar, N>&
 template <class Scalar, std::size_t N>
 ABool<Scalar, N> greaterEqual(const AReal<Scalar, N>& a, Scalar b)
 {
-    using jit_type = JITCompiler<Scalar, N>;
-    using slot_type = typename jit_type::slot_type;
+    using jit_base_type = JITCompilerBase<Scalar, N>;
+    using slot_type = typename jit_base_type::slot_type;
 
     bool passive = (value(a) >= b);
 
-    auto* jit = jit_type::getActive();
+    auto* jit = jit_base_type::getActive();
     if (jit)
     {
         uint32_t slotA = a.getSlot();
