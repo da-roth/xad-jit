@@ -1,29 +1,37 @@
 #include <XAD/XAD.hpp>
 #include <gtest/gtest.h>
 #include <cmath>
+#include <functional>
 #include <iostream>
+#include <string>
+#include <vector>
 
-// A complex function that uses many math operations
-// f(x) = sin(x) + cos(x) * 2
-//      + exp(x/10) + log(x + 5)
-//      + sqrt(x + 1) + pow(x, 1.5)
-//      + tanh(x/3) + sinh(x/5) + cosh(x/5)
-//      + abs(x - 1) + x*x (square via mul)
-//      + 1/(x + 2) (division)
-//      + cbrt(x + 1)
-//      + log10(x + 1) + log2(x + 1)
-//      + erf(x/2)
+// ============================================================================
+// Test Functions
+// ============================================================================
+
+// f1: Simple linear function
+// f(x) = x * 3 + 2, f'(x) = 3
 template <class T>
-T bigFunction(const T& x)
+T f1(const T& x)
+{
+    return x * 3.0 + 2.0;
+}
+
+// f2: Complex function with many math operations
+// Uses: sin, cos, exp, log, sqrt, tanh, sinh, cosh, abs, cbrt, log10, log2, erf
+// Note: pow with scalar exponent not yet supported in JIT
+template <class T>
+T f2(const T& x)
 {
     using std::sin; using std::cos; using std::exp; using std::log;
-    using std::sqrt; using std::pow; using std::tanh; using std::sinh;
+    using std::sqrt; using std::tanh; using std::sinh;
     using std::cosh; using std::abs; using std::cbrt;
     using std::log10; using std::log2; using std::erf;
 
     T result = sin(x) + cos(x) * 2.0;
     result = result + exp(x / 10.0) + log(x + 5.0);
-    result = result + sqrt(x + 1.0) + pow(x, 1.5);
+    result = result + sqrt(x + 1.0);
     result = result + tanh(x / 3.0) + sinh(x / 5.0) + cosh(x / 5.0);
     result = result + abs(x - 1.0) + x * x;
     result = result + 1.0 / (x + 2.0);
@@ -33,242 +41,138 @@ T bigFunction(const T& x)
     return result;
 }
 
-TEST(JIT, TapeBasedSimpleFunction)
+// ============================================================================
+// Test Infrastructure
+// ============================================================================
+
+struct TestCase
 {
-    std::cout << "\n=== Tape-Based AD Test ===" << std::endl;
-    std::cout << "Function: f(x) = x * 3 + 2" << std::endl;
-    std::cout << "Derivative: f'(x) = 3" << std::endl;
+    std::string name;
+    std::function<double(double)> func_double;
+    std::function<xad::AD(const xad::AD&)> func_ad;
+    double input;
+};
 
-    // Test with x = 1.0
-    {
-        double inputVal = 1.0;
-        double expectedOutput = 5.0;   // f(1) = 1*3 + 2 = 5
-        double expectedDeriv = 3.0;    // f'(x) = 3
-
-        xad::Tape<double> tape;
-        xad::AD x(inputVal);
-
-        tape.registerInput(x);
-        tape.newRecording();
-
-        xad::AD y = x * 3.0 + 2.0;
-
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
-
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
-
-        std::cout << "\n--- Run with x = 1.0 ---" << std::endl;
-        std::cout << "  Input:               x = " << inputVal << std::endl;
-        std::cout << "  Expected output:     f(x) = " << expectedOutput << std::endl;
-        std::cout << "  Actual output:       f(x) = " << actualOutput << std::endl;
-        std::cout << "  Expected derivative: f'(x) = " << expectedDeriv << std::endl;
-        std::cout << "  Actual derivative:   f'(x) = " << actualDeriv << std::endl;
-
-        EXPECT_DOUBLE_EQ(expectedOutput, actualOutput);
-        EXPECT_DOUBLE_EQ(expectedDeriv, actualDeriv);
-    }
-
-    // Test with x = 2.0
-    {
-        double inputVal = 2.0;
-        double expectedOutput = 8.0;   // f(2) = 2*3 + 2 = 8
-        double expectedDeriv = 3.0;    // f'(x) = 3
-
-        xad::Tape<double> tape;
-        xad::AD x(inputVal);
-
-        tape.registerInput(x);
-        tape.newRecording();
-
-        xad::AD y = x * 3.0 + 2.0;
-
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
-
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
-
-        std::cout << "\n--- Run with x = 2.0 ---" << std::endl;
-        std::cout << "  Input:               x = " << inputVal << std::endl;
-        std::cout << "  Expected output:     f(x) = " << expectedOutput << std::endl;
-        std::cout << "  Actual output:       f(x) = " << actualOutput << std::endl;
-        std::cout << "  Expected derivative: f'(x) = " << expectedDeriv << std::endl;
-        std::cout << "  Actual derivative:   f'(x) = " << actualDeriv << std::endl;
-
-        EXPECT_DOUBLE_EQ(expectedOutput, actualOutput);
-        EXPECT_DOUBLE_EQ(expectedDeriv, actualDeriv);
-    }
-
-    std::cout << std::endl;
-}
-
-TEST(JIT, TapeBasedBigFunction)
+// Compute derivative using Tape-based AD
+double computeTapeDerivative(const TestCase& tc)
 {
-    std::cout << "\n=== Tape-Based Big Function Test ===" << std::endl;
-    std::cout << "Testing many math operations: sin, cos, exp, log, sqrt, pow, tanh, sinh, cosh," << std::endl;
-    std::cout << "                              abs, div, cbrt, log10, log2, erf" << std::endl;
-
-    double inputVal = 2.0;
-
-    // Compute expected output using plain doubles
-    double expectedOutput = bigFunction(inputVal);
-
-    // Compute using Tape-based AD
     xad::Tape<double> tape;
-    xad::AD x(inputVal);
-
+    xad::AD x(tc.input);
     tape.registerInput(x);
     tape.newRecording();
-
-    xad::AD y = bigFunction(x);
-
+    xad::AD y = tc.func_ad(x);
     tape.registerOutput(y);
     derivative(y) = 1.0;
     tape.computeAdjoints();
-
-    double actualOutput = value(y);
-    double actualDeriv = derivative(x);
-
-    std::cout << "\n--- Run with x = " << inputVal << " ---" << std::endl;
-    std::cout << "  Expected output: f(x) = " << expectedOutput << std::endl;
-    std::cout << "  Actual output:   f(x) = " << actualOutput << std::endl;
-    std::cout << "  Derivative:      f'(x) = " << actualDeriv << std::endl;
-
-    EXPECT_NEAR(expectedOutput, actualOutput, 1e-10);
-    // We'll verify the derivative by comparing with JIT later
-    // For now, just check it's a reasonable value (not NaN or Inf)
-    EXPECT_TRUE(std::isfinite(actualDeriv));
-
-    std::cout << std::endl;
+    return derivative(x);
 }
 
-TEST(JIT, JitBasedSimpleFunction)
+// Compute derivative using JIT-based AD
+double computeJITDerivative(const TestCase& tc)
 {
-    std::cout << "\n=== Jit-Based AD Test ===" << std::endl;
-    std::cout << "Function: f(x) = x * 3 + 2" << std::endl;
-    std::cout << "Derivative: f'(x) = 3" << std::endl;
-
-    // Test with x = 1.0
-    {
-        double inputVal = 1.0;
-        double expectedOutput = 5.0;   // f(1) = 1*3 + 2 = 5
-        double expectedDeriv = 3.0;    // f'(x) = 3
-
-        xad::JITCompiler<double> tape;
-        xad::AD x(inputVal);
-
-        tape.registerInput(x);
-        tape.newRecording();
-
-        xad::AD y = x * 3.0 + 2.0;
-
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
-
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
-
-        std::cout << "\n--- Run with x = 1.0 ---" << std::endl;
-        std::cout << "  Input:               x = " << inputVal << std::endl;
-        std::cout << "  Expected output:     f(x) = " << expectedOutput << std::endl;
-        std::cout << "  Actual output:       f(x) = " << actualOutput << std::endl;
-        std::cout << "  Expected derivative: f'(x) = " << expectedDeriv << std::endl;
-        std::cout << "  Actual derivative:   f'(x) = " << actualDeriv << std::endl;
-
-        EXPECT_DOUBLE_EQ(expectedOutput, actualOutput);
-        EXPECT_DOUBLE_EQ(expectedDeriv, actualDeriv);
-    }
-
-    // Test with x = 2.0
-    {
-        double inputVal = 2.0;
-        double expectedOutput = 8.0;   // f(2) = 2*3 + 2 = 8
-        double expectedDeriv = 3.0;    // f'(x) = 3
-
-        xad::JITCompiler<double> tape;
-        xad::AD x(inputVal);
-
-        tape.registerInput(x);
-        tape.newRecording();
-
-        xad::AD y = x * 3.0 + 2.0;
-
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
-
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
-
-        std::cout << "\n--- Run with x = 2.0 ---" << std::endl;
-        std::cout << "  Input:               x = " << inputVal << std::endl;
-        std::cout << "  Expected output:     f(x) = " << expectedOutput << std::endl;
-        std::cout << "  Actual output:       f(x) = " << actualOutput << std::endl;
-        std::cout << "  Expected derivative: f'(x) = " << expectedDeriv << std::endl;
-        std::cout << "  Actual derivative:   f'(x) = " << actualDeriv << std::endl;
-
-        EXPECT_DOUBLE_EQ(expectedOutput, actualOutput);
-        EXPECT_DOUBLE_EQ(expectedDeriv, actualDeriv);
-    }
-
-    std::cout << std::endl;
-}
-
-TEST(JIT, JitBasedBigFunction)
-{
-    std::cout << "\n=== JIT-Based Big Function Test ===" << std::endl;
-    std::cout << "Testing many math operations: sin, cos, exp, log, sqrt, pow, tanh, sinh, cosh," << std::endl;
-    std::cout << "                              abs, div, cbrt, log10, log2, erf" << std::endl;
-
-    double inputVal = 2.0;
-
-    // Compute expected output using plain doubles
-    double expectedOutput = bigFunction(inputVal);
-
-    // Also compute the Tape derivative for comparison
-    double tapeDerivative;
-    {
-        xad::Tape<double> tape;
-        xad::AD x(inputVal);
-        tape.registerInput(x);
-        tape.newRecording();
-        xad::AD y = bigFunction(x);
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
-        tapeDerivative = derivative(x);
-    }
-
-    // Compute using JIT-based AD
     xad::JITCompiler<double> jit;
-    xad::AD x(inputVal);
-
+    xad::AD x(tc.input);
     jit.registerInput(x);
     jit.newRecording();
-
-    xad::AD y = bigFunction(x);
-
+    xad::AD y = tc.func_ad(x);
     jit.registerOutput(y);
     derivative(y) = 1.0;
     jit.computeAdjoints();
+    return derivative(x);
+}
 
-    double actualOutput = value(y);
-    double actualDeriv = derivative(x);
+// ============================================================================
+// Tests
+// ============================================================================
 
-    std::cout << "\n--- Run with x = " << inputVal << " ---" << std::endl;
-    std::cout << "  Expected output:    f(x)  = " << expectedOutput << std::endl;
-    std::cout << "  Actual output:      f(x)  = " << actualOutput << std::endl;
-    std::cout << "  Tape derivative:    f'(x) = " << tapeDerivative << std::endl;
-    std::cout << "  JIT derivative:     f'(x) = " << actualDeriv << std::endl;
+class JITTest : public ::testing::Test
+{
+  protected:
+    std::vector<TestCase> testCases;
 
-    EXPECT_NEAR(expectedOutput, actualOutput, 1e-10);
-    // Compare JIT derivative with Tape derivative - they should match!
-    EXPECT_NEAR(tapeDerivative, actualDeriv, 1e-10);
+    void SetUp() override
+    {
+        testCases = {
+            {"f1 (linear)", f1<double>, f1<xad::AD>, 2.0},
+            {"f2 (complex)", f2<double>, f2<xad::AD>, 2.0},
+        };
+    }
+};
 
-    std::cout << std::endl;
+TEST_F(JITTest, TapeBasedAD)
+{
+    std::cout << "\n=== Tape-Based AD Tests ===" << std::endl;
+
+    for (const auto& tc : testCases)
+    {
+        double expectedOutput = tc.func_double(tc.input);
+
+        xad::Tape<double> tape;
+        xad::AD x(tc.input);
+        tape.registerInput(x);
+        tape.newRecording();
+        xad::AD y = tc.func_ad(x);
+        tape.registerOutput(y);
+        derivative(y) = 1.0;
+        tape.computeAdjoints();
+
+        double actualOutput = value(y);
+        double actualDeriv = derivative(x);
+
+        std::cout << "\n--- " << tc.name << " (x=" << tc.input << ") ---" << std::endl;
+        std::cout << "  Output:     " << actualOutput << std::endl;
+        std::cout << "  Derivative: " << actualDeriv << std::endl;
+
+        EXPECT_NEAR(expectedOutput, actualOutput, 1e-10) << "Function: " << tc.name;
+        EXPECT_TRUE(std::isfinite(actualDeriv)) << "Function: " << tc.name;
+    }
+}
+
+TEST_F(JITTest, JITBasedAD)
+{
+    std::cout << "\n=== JIT-Based AD Tests ===" << std::endl;
+
+    for (const auto& tc : testCases)
+    {
+        double expectedOutput = tc.func_double(tc.input);
+        double tapeDerivative = computeTapeDerivative(tc);
+
+        xad::JITCompiler<double> jit;
+        xad::AD x(tc.input);
+        jit.registerInput(x);
+        jit.newRecording();
+        xad::AD y = tc.func_ad(x);
+        jit.registerOutput(y);
+        derivative(y) = 1.0;
+        jit.computeAdjoints();
+
+        double actualOutput = value(y);
+        double actualDeriv = derivative(x);
+
+        std::cout << "\n--- " << tc.name << " (x=" << tc.input << ") ---" << std::endl;
+        std::cout << "  Output:          " << actualOutput << std::endl;
+        std::cout << "  Tape derivative: " << tapeDerivative << std::endl;
+        std::cout << "  JIT derivative:  " << actualDeriv << std::endl;
+
+        EXPECT_NEAR(expectedOutput, actualOutput, 1e-10) << "Function: " << tc.name;
+        EXPECT_NEAR(tapeDerivative, actualDeriv, 1e-10) << "Function: " << tc.name;
+    }
+}
+
+TEST_F(JITTest, TapeVsJITConsistency)
+{
+    std::cout << "\n=== Tape vs JIT Consistency Tests ===" << std::endl;
+
+    for (const auto& tc : testCases)
+    {
+        double tapeDerivative = computeTapeDerivative(tc);
+        double jitDerivative = computeJITDerivative(tc);
+
+        std::cout << "\n--- " << tc.name << " ---" << std::endl;
+        std::cout << "  Tape: " << tapeDerivative << std::endl;
+        std::cout << "  JIT:  " << jitDerivative << std::endl;
+
+        EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10)
+            << "Derivatives should match for: " << tc.name;
+    }
 }

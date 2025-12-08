@@ -3,7 +3,6 @@
 #include <XAD/JITGraph.hpp>
 #define _USE_MATH_DEFINES
 #include <cmath>
-#include <iostream>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -30,34 +29,21 @@ class JITGraphInterpreter
                  const double* inputs, std::size_t numInputs,
                  double* outputs, std::size_t numOutputs)
     {
-        std::cout << "[Interp] forward() called, numInputs=" << numInputs << ", numOutputs=" << numOutputs << std::endl;
         if (numInputs != graph.input_ids.size())
             throw std::runtime_error("Input count mismatch");
         if (numOutputs != graph.output_ids.size())
             throw std::runtime_error("Output count mismatch");
 
         nodeValues_.resize(graph.nodeCount());
-        std::cout << "[Interp] nodeValues_.size()=" << nodeValues_.size() << std::endl;
 
         for (std::size_t i = 0; i < numInputs; ++i)
-        {
-            std::cout << "[Interp] Setting input " << i << " (node " << graph.input_ids[i] << ") = " << inputs[i] << std::endl;
             nodeValues_[graph.input_ids[i]] = inputs[i];
-        }
 
-        std::cout << "[Interp] Evaluating nodes..." << std::endl;
         for (std::size_t i = 0; i < graph.nodeCount(); ++i)
-        {
-            std::cout << "[Interp] Evaluating node " << i << " opcode=" << static_cast<int>(graph.opcodes[i]) << std::endl;
             evaluateNode(graph, static_cast<uint32_t>(i));
-            std::cout << "[Interp] Node " << i << " value=" << nodeValues_[i] << std::endl;
-        }
 
         for (std::size_t i = 0; i < numOutputs; ++i)
-        {
             outputs[i] = nodeValues_[graph.output_ids[i]];
-            std::cout << "[Interp] Output " << i << " (node " << graph.output_ids[i] << ") = " << outputs[i] << std::endl;
-        }
     }
 
     void computeAdjoints(const JITGraph& graph,
@@ -65,33 +51,19 @@ class JITGraphInterpreter
                          const double* outputAdjoints, std::size_t numOutputs,
                          double* inputAdjoints)
     {
-        std::cout << "[Interp] computeAdjoints() called" << std::endl;
         std::vector<double> outputs(numOutputs);
         forward(graph, inputValues, numInputs, outputs.data(), numOutputs);
 
-        std::cout << "[Interp] Initializing adjoints..." << std::endl;
         nodeAdjoints_.assign(graph.nodeCount(), 0.0);
 
         for (std::size_t i = 0; i < numOutputs; ++i)
-        {
-            std::cout << "[Interp] Setting output adjoint " << i << " (node " << graph.output_ids[i] << ") = " << outputAdjoints[i] << std::endl;
             nodeAdjoints_[graph.output_ids[i]] = outputAdjoints[i];
-        }
 
-        std::cout << "[Interp] Propagating adjoints backwards..." << std::endl;
         for (std::size_t i = graph.nodeCount(); i > 0; --i)
-        {
-            std::cout << "[Interp] Propagating adjoint for node " << (i-1) << std::endl;
             propagateAdjoint(graph, static_cast<uint32_t>(i - 1));
-        }
 
-        std::cout << "[Interp] Collecting input adjoints..." << std::endl;
         for (std::size_t i = 0; i < numInputs; ++i)
-        {
             inputAdjoints[i] = nodeAdjoints_[graph.input_ids[i]];
-            std::cout << "[Interp] Input adjoint " << i << " (node " << graph.input_ids[i] << ") = " << inputAdjoints[i] << std::endl;
-        }
-        std::cout << "[Interp] computeAdjoints() done" << std::endl;
     }
 
     void reset()
@@ -124,12 +96,8 @@ class JITGraphInterpreter
             case JITOpCode::Constant:
             {
                 std::size_t idx = static_cast<std::size_t>(imm);
-                std::cout << "[Interp] Constant node " << nodeId << " accessing const_pool[" << idx << "], pool size=" << graph.const_pool.size() << std::endl;
                 if (idx >= graph.const_pool.size())
-                {
-                    std::cout << "[Interp] ERROR: const_pool index out of bounds!" << std::endl;
                     throw std::runtime_error("const_pool index out of bounds");
-                }
                 result = graph.const_pool[idx];
                 break;
             }
