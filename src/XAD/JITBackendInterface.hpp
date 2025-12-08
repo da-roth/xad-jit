@@ -7,7 +7,7 @@ namespace xad
 {
 
 // Backend interface for JIT compilation
-// Implementations: JITGraphInterpreter (and others like JITForgeBackend)
+// Implementations: JITGraphInterpreter, JITForgeBackend
 class IJITBackend
 {
   public:
