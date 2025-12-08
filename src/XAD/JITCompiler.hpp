@@ -107,11 +107,19 @@ class JITCompiler
     void newRecording()
     {
         JIT_DEBUG("newRecording() called");
+        // Store input count before clearing
+        std::size_t numInputs = inputValues_.size();
+
         graph_.clear();
-        inputValues_.clear();
         derivatives_.clear();
         backend_.reset();
-        JIT_DEBUG("newRecording() done");
+
+        // Re-add input nodes to graph (inputValues_ still has the pointers)
+        for (std::size_t i = 0; i < numInputs; ++i)
+        {
+            graph_.addInput();
+        }
+        JIT_DEBUG("newRecording() done, preserved " << numInputs << " inputs");
     }
 
     XAD_INLINE void registerInput(active_type& inp)
@@ -188,28 +196,52 @@ class JITCompiler
         std::size_t numInputs = graph_.input_ids.size();
         std::size_t numOutputs = graph_.output_ids.size();
         JIT_DEBUG("  numInputs=" << numInputs << ", numOutputs=" << numOutputs << ", nodeCount=" << graph_.nodeCount());
+        JIT_DEBUG("  inputValues_.size()=" << inputValues_.size());
+        JIT_DEBUG("  derivatives_.size()=" << derivatives_.size());
 
         std::vector<double> inputs(numInputs);
+        JIT_DEBUG("  Collecting input values...");
         for (std::size_t i = 0; i < numInputs; ++i)
+        {
+            JIT_DEBUG("    input[" << i << "] id=" << graph_.input_ids[i] << " ptr=" << inputValues_[i]);
             inputs[i] = *inputValues_[i];
+            JIT_DEBUG("    input[" << i << "] value=" << inputs[i]);
+        }
 
+        JIT_DEBUG("  Collecting output adjoints...");
         std::vector<double> outputAdjoints(numOutputs, 0.0);
         for (std::size_t i = 0; i < numOutputs; ++i)
         {
             uint32_t outId = graph_.output_ids[i];
+            JIT_DEBUG("    output[" << i << "] id=" << outId);
             if (outId < derivatives_.size())
+            {
                 outputAdjoints[i] = derivatives_[outId];
+                JIT_DEBUG("    output[" << i << "] adjoint=" << outputAdjoints[i]);
+            }
+            else
+            {
+                JIT_DEBUG("    output[" << i << "] adjoint=0 (not set)");
+            }
         }
 
+        JIT_DEBUG("  Calling backend_.compile()...");
         backend_.compile(graph_);
+        JIT_DEBUG("  Calling backend_.computeAdjoints()...");
         std::vector<double> inputAdjoints(numInputs);
         backend_.computeAdjoints(graph_, inputs.data(), numInputs,
                                  outputAdjoints.data(), numOutputs,
                                  inputAdjoints.data());
+        JIT_DEBUG("  backend_.computeAdjoints() done");
 
+        JIT_DEBUG("  Storing input adjoints...");
         derivatives_.resize(graph_.nodeCount(), derivative_type());
         for (std::size_t i = 0; i < numInputs; ++i)
+        {
+            JIT_DEBUG("    inputAdjoint[" << i << "] = " << inputAdjoints[i]);
             derivatives_[graph_.input_ids[i]] = inputAdjoints[i];
+        }
+        JIT_DEBUG("computeAdjoints() done");
     }
 
     derivative_type& derivative(slot_type s)
