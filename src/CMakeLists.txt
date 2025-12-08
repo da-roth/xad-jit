@@ -173,17 +173,7 @@ set_target_properties(xad PROPERTIES VERSION "${XAD_VERSION}")
 # Forge JIT backend configuration
 if(XAD_USE_FORGE)
     target_compile_definitions(xad PUBLIC XAD_USE_FORGE)
-    if(TARGET Forge::forge)
-        target_link_libraries(xad PUBLIC Forge::forge)
-    elseif(TARGET forge)
-        target_link_libraries(xad PUBLIC forge)
-    endif()
-    # Add Forge source directory to include path
-    if(forge_SOURCE_DIR)
-        target_include_directories(xad PUBLIC
-            "$<BUILD_INTERFACE:${forge_SOURCE_DIR}>"
-        )
-    endif()
+    target_link_libraries(xad PUBLIC Forge::forge)
 endif()
 
 # Install targets
