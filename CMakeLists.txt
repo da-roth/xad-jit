@@ -49,6 +49,11 @@ if(NOT XAD_DOCS_ONLY)
         include(XADSetupTesting)
     endif()
 
+    # Forge JIT backend (optional)
+    if(XAD_USE_FORGE)
+        include(XADSetupForge)
+    endif()
+
     add_subdirectory(src)
 
     if(XAD_ENABLE_TESTS)

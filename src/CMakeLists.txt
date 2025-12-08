@@ -132,6 +132,7 @@ set(public_headers
     XAD/JITGraphInterpreter.hpp
     XAD/JITOpCodeTraits.hpp
     XAD/JITExprTraits.hpp
+    XAD/ABool.hpp
     XAD/TapeContainer.hpp
     XAD/Traits.hpp
     XAD/TypeTraits.hpp
@@ -156,6 +157,11 @@ if (MSVC)
     list(APPEND srcfiles ${PROJECT_SOURCE_DIR}/XAD.natvis)
 endif()
 
+# Add Forge backend header if enabled
+if(XAD_USE_FORGE)
+    list(APPEND srcfiles XAD/JITForgeBackend.hpp)
+endif()
+
 xad_add_library(xad STATIC ${srcfiles})
 target_include_directories(xad PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
@@ -164,8 +170,27 @@ target_include_directories(xad PUBLIC
 )
 set_target_properties(xad PROPERTIES VERSION "${XAD_VERSION}")
 
+# Forge JIT backend configuration
+if(XAD_USE_FORGE)
+    target_compile_definitions(xad PUBLIC XAD_USE_FORGE)
+    if(TARGET Forge::forge)
+        target_link_libraries(xad PUBLIC Forge::forge)
+    elseif(TARGET forge)
+        target_link_libraries(xad PUBLIC forge)
+    endif()
+    # Add Forge source directory to include path
+    if(forge_SOURCE_DIR)
+        target_include_directories(xad PUBLIC
+            "$<BUILD_INTERFACE:${forge_SOURCE_DIR}>"
+        )
+    endif()
+endif()
+
 # Install targets
 install(FILES ${public_headers} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/XAD)
+if(XAD_USE_FORGE)
+    install(FILES XAD/JITForgeBackend.hpp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/XAD)
+endif()
 install(TARGETS xad
     EXPORT XADTargets
     RUNTIME DESTINATION

@@ -271,4 +271,16 @@ class JITCompiler
 template <class Real, std::size_t N, class Backend>
 XAD_THREAD_LOCAL JITCompiler<Real, N, Backend>* JITCompiler<Real, N, Backend>::active_jit_ = nullptr;
 
+// Forward declare Forge backend for typedef
+class JITForgeBackend;
+
+// Convenience typedefs for common JIT compiler configurations
+template <class Real = double, std::size_t N = 1>
+using JITInterpreter = JITCompiler<Real, N, JITGraphInterpreter>;
+
+#ifdef XAD_USE_FORGE
+template <class Real = double, std::size_t N = 1>
+using JITForge = JITCompiler<Real, N, JITForgeBackend>;
+#endif
+
 }  // namespace xad

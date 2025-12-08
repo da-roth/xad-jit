@@ -188,3 +188,86 @@ TEST_F(JITTest, TapeVsJIT)
         std::cout << std::endl;
     }
 }
+
+#ifdef XAD_USE_FORGE
+
+TEST_F(JITTest, TapeVsJITForge)
+{
+    for (const auto& tc : testCases)
+    {
+        std::cout << "[Forge] " << tc.name << "(x) = " << tc.formula << std::endl;
+
+        std::vector<double> tapeOutputs, tapeDerivatives;
+        std::vector<double> jitOutputs, jitDerivatives;
+
+        // Compute all with Tape
+        {
+            xad::Tape<double> tape;
+            for (double input : tc.inputs)
+            {
+                xad::AD x(input);
+                tape.registerInput(x);
+                tape.newRecording();
+                xad::AD y = tc.func_ad(x);
+                tape.registerOutput(y);
+                derivative(y) = 1.0;
+                tape.computeAdjoints();
+                tapeOutputs.push_back(value(y));
+                tapeDerivatives.push_back(derivative(x));
+                tape.clearAll();
+            }
+        }
+
+        // Compute all with JIT Forge backend (record once, reuse for all inputs)
+        {
+            xad::JITCompiler<double, 1, xad::JITForgeBackend> jit;
+
+            // Record graph with first input
+            xad::AD x(tc.inputs[0]);
+            jit.registerInput(x);
+            jit.newRecording();
+            xad::AD y = tc.func_ad(x);
+            jit.registerOutput(y);
+
+            // Reuse graph for all inputs
+            for (double input : tc.inputs)
+            {
+                value(x) = input;
+
+                // Forward pass
+                double output;
+                jit.forward(&output, 1);
+                jitOutputs.push_back(output);
+
+                // Backward pass
+                jit.clearDerivatives();
+                derivative(y) = 1.0;
+                jit.computeAdjoints();
+                jitDerivatives.push_back(derivative(x));
+            }
+        }
+
+        // Compare and print results
+        for (std::size_t i = 0; i < tc.inputs.size(); ++i)
+        {
+            double input = tc.inputs[i];
+            double expectedOutput = tc.func_double(input);
+
+            std::cout << "  x=" << input << ": "
+                      << "outTape=" << tapeOutputs[i] << ", "
+                      << "outForge=" << jitOutputs[i] << ", "
+                      << "derivTape=" << tapeDerivatives[i] << ", "
+                      << "derivForge=" << jitDerivatives[i] << std::endl;
+
+            EXPECT_NEAR(expectedOutput, tapeOutputs[i], 1e-10) << tc.name << " tape output at x=" << input;
+            if (tc.expectJITMatch)
+            {
+                EXPECT_NEAR(expectedOutput, jitOutputs[i], 1e-10) << tc.name << " Forge output at x=" << input;
+                EXPECT_NEAR(tapeDerivatives[i], jitDerivatives[i], 1e-10) << tc.name << " Forge derivatives at x=" << input;
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+
+#endif // XAD_USE_FORGE
