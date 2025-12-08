@@ -53,34 +53,6 @@ struct TestCase
     double input;
 };
 
-// Compute derivative using Tape-based AD
-double computeTapeDerivative(const TestCase& tc)
-{
-    xad::Tape<double> tape;
-    xad::AD x(tc.input);
-    tape.registerInput(x);
-    tape.newRecording();
-    xad::AD y = tc.func_ad(x);
-    tape.registerOutput(y);
-    derivative(y) = 1.0;
-    tape.computeAdjoints();
-    return derivative(x);
-}
-
-// Compute derivative using JIT-based AD
-double computeJITDerivative(const TestCase& tc)
-{
-    xad::JITCompiler<double> jit;
-    xad::AD x(tc.input);
-    jit.registerInput(x);
-    jit.newRecording();
-    xad::AD y = tc.func_ad(x);
-    jit.registerOutput(y);
-    derivative(y) = 1.0;
-    jit.computeAdjoints();
-    return derivative(x);
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -99,80 +71,49 @@ class JITTest : public ::testing::Test
     }
 };
 
-TEST_F(JITTest, TapeBasedAD)
+TEST_F(JITTest, TapeVsJIT)
 {
-    std::cout << "\n=== Tape-Based AD Tests ===" << std::endl;
-
     for (const auto& tc : testCases)
     {
         double expectedOutput = tc.func_double(tc.input);
 
-        xad::Tape<double> tape;
-        xad::AD x(tc.input);
-        tape.registerInput(x);
-        tape.newRecording();
-        xad::AD y = tc.func_ad(x);
-        tape.registerOutput(y);
-        derivative(y) = 1.0;
-        tape.computeAdjoints();
+        // Compute with Tape
+        double tapeOutput, tapeDerivative;
+        {
+            xad::Tape<double> tape;
+            xad::AD x(tc.input);
+            tape.registerInput(x);
+            tape.newRecording();
+            xad::AD y = tc.func_ad(x);
+            tape.registerOutput(y);
+            derivative(y) = 1.0;
+            tape.computeAdjoints();
+            tapeOutput = value(y);
+            tapeDerivative = derivative(x);
+        }
 
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
+        // Compute with JIT
+        double jitOutput, jitDerivative;
+        {
+            xad::JITCompiler<double> jit;
+            xad::AD x(tc.input);
+            jit.registerInput(x);
+            jit.newRecording();
+            xad::AD y = tc.func_ad(x);
+            jit.registerOutput(y);
+            derivative(y) = 1.0;
+            jit.computeAdjoints();
+            jitOutput = value(y);
+            jitDerivative = derivative(x);
+        }
 
-        std::cout << "\n--- " << tc.name << " (x=" << tc.input << ") ---" << std::endl;
-        std::cout << "  Output:     " << actualOutput << std::endl;
-        std::cout << "  Derivative: " << actualDeriv << std::endl;
+        std::cout << tc.name << " (x=" << tc.input << "): "
+                  << "output=" << expectedOutput << ", "
+                  << "tape=" << tapeDerivative << ", "
+                  << "jit=" << jitDerivative << std::endl;
 
-        EXPECT_NEAR(expectedOutput, actualOutput, 1e-10) << "Function: " << tc.name;
-        EXPECT_TRUE(std::isfinite(actualDeriv)) << "Function: " << tc.name;
-    }
-}
-
-TEST_F(JITTest, JITBasedAD)
-{
-    std::cout << "\n=== JIT-Based AD Tests ===" << std::endl;
-
-    for (const auto& tc : testCases)
-    {
-        double expectedOutput = tc.func_double(tc.input);
-        double tapeDerivative = computeTapeDerivative(tc);
-
-        xad::JITCompiler<double> jit;
-        xad::AD x(tc.input);
-        jit.registerInput(x);
-        jit.newRecording();
-        xad::AD y = tc.func_ad(x);
-        jit.registerOutput(y);
-        derivative(y) = 1.0;
-        jit.computeAdjoints();
-
-        double actualOutput = value(y);
-        double actualDeriv = derivative(x);
-
-        std::cout << "\n--- " << tc.name << " (x=" << tc.input << ") ---" << std::endl;
-        std::cout << "  Output:          " << actualOutput << std::endl;
-        std::cout << "  Tape derivative: " << tapeDerivative << std::endl;
-        std::cout << "  JIT derivative:  " << actualDeriv << std::endl;
-
-        EXPECT_NEAR(expectedOutput, actualOutput, 1e-10) << "Function: " << tc.name;
-        EXPECT_NEAR(tapeDerivative, actualDeriv, 1e-10) << "Function: " << tc.name;
-    }
-}
-
-TEST_F(JITTest, TapeVsJITConsistency)
-{
-    std::cout << "\n=== Tape vs JIT Consistency Tests ===" << std::endl;
-
-    for (const auto& tc : testCases)
-    {
-        double tapeDerivative = computeTapeDerivative(tc);
-        double jitDerivative = computeJITDerivative(tc);
-
-        std::cout << "\n--- " << tc.name << " ---" << std::endl;
-        std::cout << "  Tape: " << tapeDerivative << std::endl;
-        std::cout << "  JIT:  " << jitDerivative << std::endl;
-
-        EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10)
-            << "Derivatives should match for: " << tc.name;
+        EXPECT_NEAR(expectedOutput, tapeOutput, 1e-10) << "Tape output: " << tc.name;
+        EXPECT_NEAR(expectedOutput, jitOutput, 1e-10) << "JIT output: " << tc.name;
+        EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10) << "Derivatives: " << tc.name;
     }
 }
