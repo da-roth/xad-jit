@@ -39,8 +39,8 @@ template <class S, class T> struct IsScalarFirstOp<scalar_pow1_op<S, T>> : std::
 // Helper to record scalar value as constant
 inline uint32_t recordJITConstant(JITGraph& graph, double value)
 {
-    uint32_t constIdx = graph.addConstant(value);
-    return graph.addNode(JITOpCode::Constant, 0, 0, 0, static_cast<double>(constIdx));
+    // addConstant already creates the Constant node and returns its ID
+    return graph.addConstant(value);
 }
 
 }  // namespace xad

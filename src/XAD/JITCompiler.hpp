@@ -193,6 +193,7 @@ class JITCompiler
     void computeAdjoints()
     {
         JIT_DEBUG("computeAdjoints() called");
+        graph_.dump();
         std::size_t numInputs = graph_.input_ids.size();
         std::size_t numOutputs = graph_.output_ids.size();
         JIT_DEBUG("  numInputs=" << numInputs << ", numOutputs=" << numOutputs << ", nodeCount=" << graph_.nodeCount());
