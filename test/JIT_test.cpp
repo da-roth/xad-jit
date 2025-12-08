@@ -78,14 +78,14 @@ TEST_F(JITTest, TapeVsJIT)
     {
         std::cout << tc.name << "(x) = " << tc.formula << std::endl;
 
-        for (double input : tc.inputs)
-        {
-            double expectedOutput = tc.func_double(input);
+        std::vector<double> tapeOutputs, tapeDerivatives;
+        std::vector<double> jitOutputs, jitDerivatives;
 
-            // Compute with Tape
-            double tapeOutput, tapeDerivative;
+        // Compute all with Tape
+        {
+            xad::Tape<double> tape;
+            for (double input : tc.inputs)
             {
-                xad::Tape<double> tape;
                 xad::AD x(input);
                 tape.registerInput(x);
                 tape.newRecording();
@@ -93,14 +93,17 @@ TEST_F(JITTest, TapeVsJIT)
                 tape.registerOutput(y);
                 derivative(y) = 1.0;
                 tape.computeAdjoints();
-                tapeOutput = value(y);
-                tapeDerivative = derivative(x);
+                tapeOutputs.push_back(value(y));
+                tapeDerivatives.push_back(derivative(x));
+                tape.clearAll();
             }
+        }
 
-            // Compute with JIT
-            double jitOutput, jitDerivative;
+        // Compute all with JIT
+        {
+            xad::JITCompiler<double> jit;
+            for (double input : tc.inputs)
             {
-                xad::JITCompiler<double> jit;
                 xad::AD x(input);
                 jit.registerInput(x);
                 jit.newRecording();
@@ -108,18 +111,26 @@ TEST_F(JITTest, TapeVsJIT)
                 jit.registerOutput(y);
                 derivative(y) = 1.0;
                 jit.computeAdjoints();
-                jitOutput = value(y);
-                jitDerivative = derivative(x);
+                jitOutputs.push_back(value(y));
+                jitDerivatives.push_back(derivative(x));
+                jit.clearAll();
             }
+        }
+
+        // Compare and print results
+        for (std::size_t i = 0; i < tc.inputs.size(); ++i)
+        {
+            double input = tc.inputs[i];
+            double expectedOutput = tc.func_double(input);
 
             std::cout << "  x=" << input << ": "
-                      << "output=" << tapeOutput << ", "
-                      << "derivTape=" << tapeDerivative << ", "
-                      << "derivJIT=" << jitDerivative << std::endl;
+                      << "output=" << tapeOutputs[i] << ", "
+                      << "derivTape=" << tapeDerivatives[i] << ", "
+                      << "derivJIT=" << jitDerivatives[i] << std::endl;
 
-            EXPECT_NEAR(expectedOutput, tapeOutput, 1e-10) << tc.name << " tape output at x=" << input;
-            EXPECT_NEAR(expectedOutput, jitOutput, 1e-10) << tc.name << " JIT output at x=" << input;
-            EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10) << tc.name << " derivatives at x=" << input;
+            EXPECT_NEAR(expectedOutput, tapeOutputs[i], 1e-10) << tc.name << " tape output at x=" << input;
+            EXPECT_NEAR(expectedOutput, jitOutputs[i], 1e-10) << tc.name << " JIT output at x=" << input;
+            EXPECT_NEAR(tapeDerivatives[i], jitDerivatives[i], 1e-10) << tc.name << " derivatives at x=" << input;
         }
         std::cout << std::endl;
     }
