@@ -321,8 +321,8 @@ struct AReal
     {
         if (slot_ != INVALID_SLOT)
             return slot_;
-        // Not registered - treat as constant
-        return recordJITConstant(graph, static_cast<double>(this->a_));
+        // Not registered - treat as constant (handles nested AD types)
+        return recordJITConstant(graph, getNestedDoubleValue(this->a_));
     }
 
   private:

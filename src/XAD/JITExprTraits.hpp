@@ -7,6 +7,15 @@
 namespace xad
 {
 
+// Helper to extract nested double value from potentially nested AD types
+template <class T>
+typename std::enable_if<std::is_arithmetic<T>::value, double>::type
+getNestedDoubleValue(const T& x) { return static_cast<double>(x); }
+
+template <class T>
+typename std::enable_if<!std::is_arithmetic<T>::value, double>::type
+getNestedDoubleValue(const T& x) { return getNestedDoubleValue(x.value()); }
+
 // Helper to detect if Op has a scalar constant (b_ member)
 template <class Op, class = void>
 struct HasScalarConstant : std::false_type {};
@@ -14,10 +23,10 @@ struct HasScalarConstant : std::false_type {};
 template <class Op>
 struct HasScalarConstant<Op, decltype(void(std::declval<Op>().b_))> : std::true_type {};
 
-// Helper to get constant value from scalar ops
+// Helper to get constant value from scalar ops (handles nested AD types)
 template <class Op>
 typename std::enable_if<HasScalarConstant<Op>::value, double>::type
-getScalarConstant(const Op& op) { return static_cast<double>(op.b_); }
+getScalarConstant(const Op& op) { return getNestedDoubleValue(op.b_); }
 
 // Detect if Op is scalar_sub1 or scalar_div1 (scalar is first operand)
 template <class> struct IsScalarFirstOp : std::false_type {};
