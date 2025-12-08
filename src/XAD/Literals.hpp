@@ -329,7 +329,7 @@ struct AReal
 
     template <class T, std::size_t d__cnt>
     friend class Tape;
-    template <class T, std::size_t d__cnt>
+    template <class T, std::size_t d__cnt, class B>
     friend class JITCompiler;
     typename tape_type::slot_type slot_;
 };
