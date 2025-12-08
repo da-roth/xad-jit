@@ -51,7 +51,7 @@ struct TestCase
     std::string formula;
     std::function<double(double)> func_double;
     std::function<xad::AD(const xad::AD&)> func_ad;
-    double input;
+    std::vector<double> inputs;
 };
 
 // ============================================================================
@@ -66,8 +66,8 @@ class JITTest : public ::testing::Test
     void SetUp() override
     {
         testCases = {
-            {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, 2.0},
-            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, 2.0},
+            {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, {2.0, 0.5, -1.0}},
+            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, {2.0, 0.5}},
         };
     }
 };
@@ -76,46 +76,51 @@ TEST_F(JITTest, TapeVsJIT)
 {
     for (const auto& tc : testCases)
     {
-        double expectedOutput = tc.func_double(tc.input);
-
-        // Compute with Tape
-        double tapeOutput, tapeDerivative;
-        {
-            xad::Tape<double> tape;
-            xad::AD x(tc.input);
-            tape.registerInput(x);
-            tape.newRecording();
-            xad::AD y = tc.func_ad(x);
-            tape.registerOutput(y);
-            derivative(y) = 1.0;
-            tape.computeAdjoints();
-            tapeOutput = value(y);
-            tapeDerivative = derivative(x);
-        }
-
-        // Compute with JIT
-        double jitOutput, jitDerivative;
-        {
-            xad::JITCompiler<double> jit;
-            xad::AD x(tc.input);
-            jit.registerInput(x);
-            jit.newRecording();
-            xad::AD y = tc.func_ad(x);
-            jit.registerOutput(y);
-            derivative(y) = 1.0;
-            jit.computeAdjoints();
-            jitOutput = value(y);
-            jitDerivative = derivative(x);
-        }
-
         std::cout << tc.name << "(x) = " << tc.formula << std::endl;
-        std::cout << "  x = " << tc.input << std::endl;
-        std::cout << "  outputTape = " << tapeOutput << ", outputJIT = " << jitOutput << std::endl;
-        std::cout << "  derivTape  = " << tapeDerivative << ", derivJIT  = " << jitDerivative << std::endl;
-        std::cout << std::endl;
 
-        EXPECT_NEAR(expectedOutput, tapeOutput, 1e-10) << "Tape output: " << tc.name;
-        EXPECT_NEAR(expectedOutput, jitOutput, 1e-10) << "JIT output: " << tc.name;
-        EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10) << "Derivatives: " << tc.name;
+        for (double input : tc.inputs)
+        {
+            double expectedOutput = tc.func_double(input);
+
+            // Compute with Tape
+            double tapeOutput, tapeDerivative;
+            {
+                xad::Tape<double> tape;
+                xad::AD x(input);
+                tape.registerInput(x);
+                tape.newRecording();
+                xad::AD y = tc.func_ad(x);
+                tape.registerOutput(y);
+                derivative(y) = 1.0;
+                tape.computeAdjoints();
+                tapeOutput = value(y);
+                tapeDerivative = derivative(x);
+            }
+
+            // Compute with JIT
+            double jitOutput, jitDerivative;
+            {
+                xad::JITCompiler<double> jit;
+                xad::AD x(input);
+                jit.registerInput(x);
+                jit.newRecording();
+                xad::AD y = tc.func_ad(x);
+                jit.registerOutput(y);
+                derivative(y) = 1.0;
+                jit.computeAdjoints();
+                jitOutput = value(y);
+                jitDerivative = derivative(x);
+            }
+
+            std::cout << "  x=" << input << ": "
+                      << "output=" << tapeOutput << ", "
+                      << "derivTape=" << tapeDerivative << ", "
+                      << "derivJIT=" << jitDerivative << std::endl;
+
+            EXPECT_NEAR(expectedOutput, tapeOutput, 1e-10) << tc.name << " tape output at x=" << input;
+            EXPECT_NEAR(expectedOutput, jitOutput, 1e-10) << tc.name << " JIT output at x=" << input;
+            EXPECT_NEAR(tapeDerivative, jitDerivative, 1e-10) << tc.name << " derivatives at x=" << input;
+        }
+        std::cout << std::endl;
     }
 }
