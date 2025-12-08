@@ -41,6 +41,25 @@ T f2(const T& x)
     return result;
 }
 
+// f3: Branching function to demonstrate JIT graph reuse
+// if (x < 2) return 2*x else return 10*x
+// When recorded with x=1, JIT captures the first branch (2*x)
+// and will use it even for x=3, showing graph reuse behavior
+
+// Helper to get value for both double and AD types
+inline double getValue(double x) { return x; }
+template <class T>
+double getValue(const T& x) { return value(x); }
+
+template <class T>
+T f3(const T& x)
+{
+    if (getValue(x) < 2.0)
+        return 2.0 * x;
+    else
+        return 10.0 * x;
+}
+
 // ============================================================================
 // Test Infrastructure
 // ============================================================================
@@ -52,6 +71,7 @@ struct TestCase
     std::function<double(double)> func_double;
     std::function<xad::AD(const xad::AD&)> func_ad;
     std::vector<double> inputs;
+    bool expectJITMatch = true;  // false for branching functions where JIT intentionally differs
 };
 
 // ============================================================================
@@ -66,8 +86,9 @@ class JITTest : public ::testing::Test
     void SetUp() override
     {
         testCases = {
-            {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, {2.0, 0.5, -1.0}},
-            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, {2.0, 0.5}},
+            {"f1", "x * 3 + 2", f1<double>, f1<xad::AD>, {2.0, 0.5, -1.0}, true},
+            {"f2", "sin(x) + cos(x)*2 + exp(x/10) + log(x+5) + sqrt(x+1) + ...", f2<double>, f2<xad::AD>, {2.0, 0.5}, true},
+            {"f3", "if (x < 2) 2*x else 10*x  [JIT records with x=1, reuses for x=3]", f3<double>, f3<xad::AD>, {1.0, 3.0}, false},
         };
     }
 };
@@ -135,13 +156,17 @@ TEST_F(JITTest, TapeVsJIT)
             double expectedOutput = tc.func_double(input);
 
             std::cout << "  x=" << input << ": "
-                      << "output=" << tapeOutputs[i] << ", "
+                      << "outTape=" << tapeOutputs[i] << ", "
+                      << "outJIT=" << jitOutputs[i] << ", "
                       << "derivTape=" << tapeDerivatives[i] << ", "
                       << "derivJIT=" << jitDerivatives[i] << std::endl;
 
             EXPECT_NEAR(expectedOutput, tapeOutputs[i], 1e-10) << tc.name << " tape output at x=" << input;
-            EXPECT_NEAR(expectedOutput, jitOutputs[i], 1e-10) << tc.name << " JIT output at x=" << input;
-            EXPECT_NEAR(tapeDerivatives[i], jitDerivatives[i], 1e-10) << tc.name << " derivatives at x=" << input;
+            if (tc.expectJITMatch)
+            {
+                EXPECT_NEAR(expectedOutput, jitOutputs[i], 1e-10) << tc.name << " JIT output at x=" << input;
+                EXPECT_NEAR(tapeDerivatives[i], jitDerivatives[i], 1e-10) << tc.name << " derivatives at x=" << input;
+            }
         }
         std::cout << std::endl;
     }
