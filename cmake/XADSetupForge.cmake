@@ -1,3 +1,10 @@
+# Forge's packaging hardcodes static MSVC runtime, so XAD must match
+if(MSVC AND NOT XAD_STATIC_MSVC_RUNTIME)
+    message(STATUS "Forge requires static MSVC runtime - enabling XAD_STATIC_MSVC_RUNTIME")
+    set(XAD_STATIC_MSVC_RUNTIME ON CACHE BOOL "Use static C++ Runtime in MSVC" FORCE)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
+
 set(FORGE_INSTALL_DIR "${CMAKE_BINARY_DIR}/forge-install" CACHE PATH "Forge installation directory")
 
 # Try to find pre-installed Forge
