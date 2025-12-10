@@ -53,8 +53,3 @@
 // JIT compilation support
 #include <XAD/JITCompiler.hpp>
 #include <XAD/ABool.hpp>
-
-// Forge backend (optional - requires XAD_USE_FORGE)
-#ifdef XAD_USE_FORGE
-#include <XAD/JITForgeBackend.hpp>
-#endif

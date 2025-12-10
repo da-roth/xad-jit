@@ -71,6 +71,3 @@ option(XAD_REDUCED_MEMORY "Reduce memory required for tape, at a slight performa
 if(XAD_REDUCED_MEMORY)
     message(STATUS "Using reduced memory for tape storage at a slight performance cost")
 endif()
-
-# JIT Backend options
-option(XAD_USE_FORGE "Enable Forge JIT backend for native code generation (https://github.com/da-roth/forge)" ON)
